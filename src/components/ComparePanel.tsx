@@ -2,6 +2,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -53,14 +54,17 @@ export function ComparePanel({ plans, theme }: ComparePanelProps) {
   const ageSet = new Set<number>();
   results.forEach((r) => r.result.schedule.forEach((y) => ageSet.add(y.age)));
   const ages = [...ageSet].sort((a, b) => a - b);
-  const chartData = ages.map((age) => {
-    const row: Record<string, number> = { age };
-    results.forEach((r, i) => {
-      const point = r.result.schedule.find((y) => y.age === age);
-      row[`p${i}`] = point ? Math.round(point.loanBalance / 10000) : 0;
+  const buildChartData = (key: 'loanBalance' | 'savings') =>
+    ages.map((age) => {
+      const row: Record<string, number> = { age };
+      results.forEach((r, i) => {
+        const point = r.result.schedule.find((y) => y.age === age);
+        row[`p${i}`] = point ? Math.round(point[key] / 10000) : 0;
+      });
+      return row;
     });
-    return row;
-  });
+  const chartData = buildChartData('loanBalance');
+  const savingsChartData = buildChartData('savings');
 
   return (
     <div className="space-y-6">
@@ -134,6 +138,47 @@ export function ComparePanel({ plans, theme }: ComparePanelProps) {
               axisLine={false}
               tickFormatter={(v) => v.toLocaleString('ja-JP')}
             />
+            <Tooltip />
+            {results.map((r, i) => (
+              <Line
+                key={r.plan.id}
+                type="monotone"
+                dataKey={`p${i}`}
+                name={r.plan.name}
+                stroke={PLAN_COLORS[i % PLAN_COLORS.length]}
+                strokeWidth={2}
+                dot={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="card p-5">
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+          貯金の比較
+        </h3>
+        <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
+          横軸：年齢（歳）／縦軸：貯金（万円）・0を下回ると赤字
+        </p>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={savingsChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <XAxis
+              dataKey="age"
+              tick={{ fill: axisColor, fontSize: 12 }}
+              tickLine={false}
+              axisLine={{ stroke: gridColor }}
+              minTickGap={24}
+            />
+            <YAxis
+              width={44}
+              tick={{ fill: axisColor, fontSize: 12 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => v.toLocaleString('ja-JP')}
+            />
+            <ReferenceLine y={0} stroke="#f43f5e" strokeDasharray="4 2" />
             <Tooltip />
             {results.map((r, i) => (
               <Line
