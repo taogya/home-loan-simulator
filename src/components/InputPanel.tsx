@@ -75,6 +75,8 @@ export function InputPanel({
   const [evInterval, setEvInterval] = useState(0);
   const [evUntilAge, setEvUntilAge] = useState(value.age + 30);
   const [customExpenseLabel, setCustomExpenseLabel] = useState('');
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [expenseDraft, setExpenseDraft] = useState('');
 
   const resetEventForm = () => {
     setEditingId(null);
@@ -124,6 +126,18 @@ export function InputPanel({
     if (!label) return;
     onAddExpense({ id: crypto.randomUUID(), label, amountMan: 3 });
     setCustomExpenseLabel('');
+  };
+
+  const startEditExpense = (id: string, current: number) => {
+    setExpenseDraft(String(current));
+    setEditingExpenseId(id);
+  };
+  const commitExpense = (id: string) => {
+    const n = Number(expenseDraft);
+    if (!Number.isNaN(n) && expenseDraft.trim() !== '') {
+      onUpdateExpense(id, { amountMan: Math.max(0, n) });
+    }
+    setEditingExpenseId(null);
   };
 
   return (
@@ -253,6 +267,36 @@ export function InputPanel({
           format={formatManLabel}
           hint="副業・家賃収入など（年）"
         />
+        <NumberSlider
+          label="定年退職の年齢"
+          value={value.retireAge}
+          min={55}
+          max={75}
+          step={1}
+          onChange={(v) => onChange({ retireAge: v })}
+          format={(v) => `${v}歳`}
+          hint="この年齢で給与収入が止まります"
+        />
+        <NumberSlider
+          label="年金（手取り月額）"
+          value={value.pensionMonthlyMan}
+          min={0}
+          max={40}
+          step={1}
+          onChange={(v) => onChange({ pensionMonthlyMan: v })}
+          format={formatManLabel}
+          hint="目安：夫婦で約22万円／単身で約15万円"
+        />
+        <NumberSlider
+          label="年金の受給開始"
+          value={value.pensionStartAge}
+          min={60}
+          max={75}
+          step={1}
+          onChange={(v) => onChange({ pensionStartAge: v })}
+          format={(v) => `${v}歳`}
+          hint="原則65歳。定年より遅いと無収入期間が出ます"
+        />
       </CollapsibleSection>
 
       {/* 毎月の支出（追加式） */}
@@ -275,9 +319,32 @@ export function InputPanel({
                     {e.label}
                   </span>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {formatManLabel(e.amountMan)}
-                    </span>
+                    {editingExpenseId === e.id ? (
+                      <input
+                        type="number"
+                        value={expenseDraft}
+                        min={0}
+                        step={0.5}
+                        autoFocus
+                        onChange={(ev) => setExpenseDraft(ev.target.value)}
+                        onBlur={() => commitExpense(e.id)}
+                        onKeyDown={(ev) => {
+                          if (ev.key === 'Enter') commitExpense(e.id);
+                          if (ev.key === 'Escape') setEditingExpenseId(null);
+                        }}
+                        className="w-20 rounded-lg border border-indigo-300 bg-white px-2 py-0.5 text-right text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:border-indigo-600 dark:bg-slate-950 dark:text-white"
+                        aria-label={`${e.label}の月額を入力`}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEditExpense(e.id, e.amountMan)}
+                        title="クリックで直接入力"
+                        className="text-sm font-semibold text-slate-900 underline decoration-dotted decoration-slate-300 underline-offset-2 transition hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400"
+                      >
+                        {formatManLabel(e.amountMan)}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onRemoveExpense(e.id)}

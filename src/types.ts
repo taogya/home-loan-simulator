@@ -51,6 +51,14 @@ export interface FormState {
   /** 副収入（手取り・年・万円） */
   sideIncomeMan: number;
 
+  // 定年・年金
+  /** 定年退職の年齢（歳・以降は給与収入なし） */
+  retireAge: number;
+  /** 年金の受給開始年齢（歳） */
+  pensionStartAge: number;
+  /** 年金の手取り月額（万円） */
+  pensionMonthlyMan: number;
+
   // 支出（毎月・万円）
   /** 毎月の支出項目（追加式・定番＋自由ラベル） */
   expenses: ExpenseItem[];
@@ -85,6 +93,9 @@ export const DEFAULT_FORM: FormState = {
   raiseStopAge: 55,
   spouseIncomeMan: 0,
   sideIncomeMan: 0,
+  retireAge: 65,
+  pensionStartAge: 65,
+  pensionMonthlyMan: 15,
   expenses: [
     { id: 'exp-living', label: '生活費', amountMan: 20 },
     { id: 'exp-car', label: '車の維持費', amountMan: 2 },

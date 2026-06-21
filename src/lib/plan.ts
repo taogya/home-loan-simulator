@@ -200,15 +200,25 @@ export function simulatePlan(form: FormState): PlanResult {
     }
     totalInterest += yearInterest;
 
-    // 家計（月給は昇給で複利成長し、昇給停止年齢で頭打ち。手取りに換算）
-    const grownYears = Math.max(0, Math.min(y - 1, form.raiseStopAge - startAge));
-    const grossAnnual =
-      form.monthlySalaryMan *
-      10000 *
-      (12 + form.bonusMonths) *
-      Math.pow(1 + form.raiseRatePct / 100, grownYears);
+    // 家計：本人収入は定年までは給与（昇給・ボーナス込み・手取り換算）、
+    // 年金開始以降は年金（手取り月額×12）、その間（定年〜受給開始）は無収入。
+    let personalIncome = 0;
+    if (age < form.retireAge) {
+      const grownYears = Math.max(
+        0,
+        Math.min(y - 1, form.raiseStopAge - startAge),
+      );
+      const grossAnnual =
+        form.monthlySalaryMan *
+        10000 *
+        (12 + form.bonusMonths) *
+        Math.pow(1 + form.raiseRatePct / 100, grownYears);
+      personalIncome = estimateTakeHome(grossAnnual);
+    } else if (age >= form.pensionStartAge) {
+      personalIncome = form.pensionMonthlyMan * 10000 * 12;
+    }
     const income =
-      estimateTakeHome(grossAnnual) +
+      personalIncome +
       form.spouseIncomeMan * 10000 +
       form.sideIncomeMan * 10000;
     const eventExpense = form.events
