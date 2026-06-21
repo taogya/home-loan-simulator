@@ -24,6 +24,10 @@ export interface ExpenseItem {
   label: string;
   /** 月額（万円） */
   amountMan: number;
+  /** 何年後から始まるか（0/undefined=今から） */
+  startAfterYears?: number;
+  /** 何年間続くか（0/undefined=ずっと） */
+  durationYears?: number;
 }
 
 export interface FormState {
@@ -98,7 +102,6 @@ export const DEFAULT_FORM: FormState = {
   pensionMonthlyMan: 15,
   expenses: [
     { id: 'exp-living', label: '生活費', amountMan: 20 },
-    { id: 'exp-car', label: '車の維持費', amountMan: 2 },
     { id: 'exp-insurance', label: '保険', amountMan: 2 },
   ],
   bonusRepayMan: 0,

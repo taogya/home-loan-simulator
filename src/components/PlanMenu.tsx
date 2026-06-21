@@ -35,10 +35,10 @@ export function PlanMenu({ onExport, onImport }: PlanMenuProps) {
               }}
               className="block w-full px-4 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
             >
-              エクスポート（JSON）
+              ファイルに保存
             </button>
             <label className="block w-full cursor-pointer px-4 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700">
-              インポート（JSON）
+              ファイルから読み込み
               <input
                 type="file"
                 accept="application/json,.json"

@@ -2,7 +2,7 @@
 // 繰上げはローン残高と貯金が相互に影響するため、年次の一つのループで処理する。
 // すべての金額は「円」単位で扱う。
 
-import type { FormState } from '../types';
+import type { FormState, ExpenseItem } from '../types';
 import { eventOccursAt } from './events';
 
 export interface PlanYear {
@@ -123,6 +123,15 @@ function estimateTakeHome(grossAnnualYen: number): number {
   return Math.max(0, net);
 }
 
+/** その支出が指定の経過年で有効か（「○年後から○年間」を考慮。durationなし=ずっと） */
+function expenseActiveAt(e: ExpenseItem, elapsedYears: number): boolean {
+  const start = e.startAfterYears ?? 0;
+  const dur = e.durationYears ?? 0;
+  if (elapsedYears < start) return false;
+  if (dur > 0 && elapsedYears >= start + dur) return false;
+  return true;
+}
+
 export function simulatePlan(form: FormState): PlanResult {
   const principal = form.loanAmountMan * 10000;
   const startAge = form.age;
@@ -135,13 +144,6 @@ export function simulatePlan(form: FormState): PlanResult {
   const bonusPrincipal = Math.min(presentValue(bonus, rB, years * 2), principal);
   const monthlyPrincipal = principal - bonusPrincipal;
   const monthly = annuity(monthlyPrincipal, rM, years * 12);
-
-  // 暮らしの支出（年額）
-  const monthlyExpenseMan = form.expenses.reduce(
-    (sum, e) => sum + e.amountMan,
-    0,
-  );
-  const annualExpense = monthlyExpenseMan * 12 * 10000;
 
   let balM = monthlyPrincipal;
   let balB = bonusPrincipal;
@@ -221,6 +223,12 @@ export function simulatePlan(form: FormState): PlanResult {
       personalIncome +
       form.spouseIncomeMan * 10000 +
       form.sideIncomeMan * 10000;
+    const annualExpense =
+      form.expenses
+        .filter((e) => expenseActiveAt(e, age - startAge))
+        .reduce((sum, e) => sum + e.amountMan, 0) *
+      12 *
+      10000;
     const eventExpense = form.events
       .filter((e) => eventOccursAt(e, age))
       .reduce((sum, e) => sum + e.amountMan * 10000, 0);

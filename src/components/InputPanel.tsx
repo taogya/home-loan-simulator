@@ -25,6 +25,23 @@ const EXPENSE_PRESETS: { label: string; amountMan: number }[] = [
   { label: 'こづかい', amountMan: 3 },
 ];
 
+const LIFE_EVENT_PRESETS: {
+  label: string;
+  amountMan: number;
+  yearsLater: number;
+}[] = [
+  { label: '車の買い替え', amountMan: 150, yearsLater: 7 },
+  { label: 'リフォーム', amountMan: 300, yearsLater: 15 },
+  { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 12 },
+  { label: '給湯器の交換', amountMan: 30, yearsLater: 12 },
+  { label: 'エアコン買い替え', amountMan: 15, yearsLater: 10 },
+  { label: '出産', amountMan: 50, yearsLater: 2 },
+  { label: '入学（大学）', amountMan: 100, yearsLater: 18 },
+  { label: '結婚式', amountMan: 300, yearsLater: 3 },
+  { label: '家族旅行', amountMan: 30, yearsLater: 5 },
+  { label: '家電の買い替え', amountMan: 20, yearsLater: 8 },
+];
+
 interface InputPanelProps {
   value: FormState;
   onChange: (patch: Partial<FormState>) => void;
@@ -36,6 +53,24 @@ interface InputPanelProps {
   onAddExpense: (item: ExpenseItem) => void;
   onRemoveExpense: (id: string) => void;
   onUpdateExpense: (id: string, patch: Partial<ExpenseItem>) => void;
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3 text-slate-400 transition group-hover:text-indigo-500"
+      aria-hidden="true"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
 }
 
 function PanelChevron({ open }: { open: boolean }) {
@@ -163,7 +198,7 @@ export function InputPanel({
 
       {open && (
         <div className="mt-6 space-y-6">
-          {/* 基本（最小入力） */}
+          <CollapsibleSection title="基本" defaultOpen>
       <NumberSlider
         label="借入額"
         value={value.loanAmountMan}
@@ -182,7 +217,7 @@ export function InputPanel({
         step={0.05}
         onChange={(v) => onChange({ ratePct: v })}
         format={(v) => `${v.toFixed(2)}%`}
-        hint="変動の目安 0.3〜0.7% ／ 固定 1.5〜2.0%"
+        hint="固定は変動より高め。金融機関によって異なります"
       />
       <NumberSlider
         label="返済期間"
@@ -195,16 +230,7 @@ export function InputPanel({
         hint="最長35年が一般的"
       />
       <NumberSlider
-        label="月給（額面）"
-        value={value.monthlySalaryMan}
-        min={10}
-        max={200}
-        step={1}
-        onChange={(v) => onChange({ monthlySalaryMan: v })}
-        format={formatManLabel}
-        hint="税引き前の月給（1ヶ月分）。手取りは自動で概算します"
-      />
-      <NumberSlider
+
         label="借入時の年齢"
         value={value.age}
         min={18}
@@ -214,9 +240,20 @@ export function InputPanel({
         format={(v) => `${v}歳`}
         hint="完済年齢の計算に使います"
       />
+          </CollapsibleSection>
 
-      {/* 収入の詳細（折りたたみ） */}
-      <CollapsibleSection title="収入の詳細">
+      {/* 収入（折りたたみ） */}
+      <CollapsibleSection title="収入">
+        <NumberSlider
+          label="月給（額面）"
+          value={value.monthlySalaryMan}
+          min={10}
+          max={200}
+          step={1}
+          onChange={(v) => onChange({ monthlySalaryMan: v })}
+          format={formatManLabel}
+          hint="税引き前の月給。手取りは自動で計算します"
+        />
         <NumberSlider
           label="年間ボーナス（月給の何ヶ月分）"
           value={value.bonusMonths}
@@ -245,7 +282,7 @@ export function InputPanel({
           step={1}
           onChange={(v) => onChange({ raiseStopAge: v })}
           format={(v) => `${v}歳`}
-          hint="これ以降は年収横ばい"
+          hint="この年齢で昇給が止まり、以降の年収は横ばいになります"
         />
         <NumberSlider
           label="配偶者の年収"
@@ -267,6 +304,10 @@ export function InputPanel({
           format={formatManLabel}
           hint="副業・家賃収入など（年）"
         />
+      </CollapsibleSection>
+
+      {/* 定年・年金（折りたたみ） */}
+      <CollapsibleSection title="定年・年金">
         <NumberSlider
           label="定年退職の年齢"
           value={value.retireAge}
@@ -275,7 +316,7 @@ export function InputPanel({
           step={1}
           onChange={(v) => onChange({ retireAge: v })}
           format={(v) => `${v}歳`}
-          hint="この年齢で給与収入が止まります"
+          hint="給与収入が止まる年齢"
         />
         <NumberSlider
           label="年金（手取り月額）"
@@ -339,10 +380,11 @@ export function InputPanel({
                       <button
                         type="button"
                         onClick={() => startEditExpense(e.id, e.amountMan)}
-                        title="クリックで直接入力"
-                        className="text-sm font-semibold text-slate-900 underline decoration-dotted decoration-slate-300 underline-offset-2 transition hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400"
+                        title="タップして入力"
+                        className="group flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-sm font-semibold text-slate-900 transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       >
                         {formatManLabel(e.amountMan)}
+                        <PencilIcon />
                       </button>
                     )}
                     <button
@@ -366,6 +408,40 @@ export function InputPanel({
                   className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-600 dark:bg-slate-700"
                   aria-label={`${e.label}の月額`}
                 />
+                <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
+                  <span>期間</span>
+                  <input
+                    type="number"
+                    value={e.startAfterYears ?? 0}
+                    min={0}
+                    max={50}
+                    onChange={(ev) =>
+                      onUpdateExpense(e.id, {
+                        startAfterYears: Number(ev.target.value),
+                      })
+                    }
+                    className="w-12 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    aria-label={`${e.label}を何年後から`}
+                  />
+                  <span>年後（{value.age + (e.startAfterYears ?? 0)}歳）から</span>
+                  <input
+                    type="number"
+                    value={e.durationYears ? e.durationYears : ''}
+                    min={0}
+                    max={60}
+                    placeholder="ずっと"
+                    onChange={(ev) =>
+                      onUpdateExpense(e.id, {
+                        durationYears: ev.target.value
+                          ? Number(ev.target.value)
+                          : undefined,
+                      })
+                    }
+                    className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-slate-700 placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                    aria-label={`${e.label}を何年間`}
+                  />
+                  <span>{e.durationYears ? '年間' : '（空＝ずっと）'}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -409,14 +485,15 @@ export function InputPanel({
           <button
             type="button"
             onClick={handleAddCustomExpense}
-            className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
+            disabled={!customExpenseLabel.trim()}
+            className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             追加
           </button>
         </div>
       </CollapsibleSection>
 
-      <CollapsibleSection title="返済プラン・貯金">
+      <CollapsibleSection title="貯金・繰上げ・ボーナス払い">
         <NumberSlider
           label="ボーナス払い（1回の返済額）"
           value={value.bonusRepayMan}
@@ -425,7 +502,7 @@ export function InputPanel({
           step={1}
           onChange={(v) => onChange({ bonusRepayMan: v })}
           format={formatManLabel}
-          hint="ボーナス時に返す固定額（年2回）。月々が軽くなります（年数は同じ）"
+          hint="ボーナス月だけ月々返済に＋して返します。月々が軽くなり、返済期間は変わりません"
         />
         <NumberSlider
           label="いまの貯金"
@@ -552,6 +629,30 @@ export function InputPanel({
               })}
           </ul>
         )}
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            定番から追加
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {LIFE_EVENT_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() =>
+                  onAddEvent({
+                    id: crypto.randomUUID(),
+                    atAge: value.age + preset.yearsLater,
+                    label: preset.label,
+                    amountMan: preset.amountMan,
+                  })
+                }
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-700"
+              >
+                ＋ {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="rounded-xl bg-white p-3 dark:bg-slate-900">
           <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
             {editingId ? 'イベントを編集' : 'イベントを追加'}
@@ -641,7 +742,8 @@ export function InputPanel({
             <button
               type="button"
               onClick={handleSubmitEvent}
-              className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
+              disabled={!evLabel.trim()}
+              className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {editingId ? '更新' : '追加'}
             </button>
