@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { InputPanel } from './components/InputPanel'
 import { StatHighlight } from './components/StatHighlight'
 import { BalanceChart } from './components/BalanceChart'
@@ -219,21 +219,10 @@ function App() {
   const selectPlan = (id: string) =>
     setPlansState((prev) => ({ ...prev, activeId: id }))
 
-  const swipeStart = useRef<{ x: number; y: number } | null>(null)
-  const handleSwipeStart = (e: ReactPointerEvent) => {
-    swipeStart.current = { x: e.clientX, y: e.clientY }
-  }
-  const handleSwipeEnd = (e: ReactPointerEvent) => {
-    const s = swipeStart.current
-    swipeStart.current = null
-    if (!s) return
-    const dx = e.clientX - s.x
-    const dy = e.clientY - s.y
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+  const goPlan = (dir: number) => {
     const idx = plans.findIndex((p) => p.id === activeId)
-    if (idx === -1) return
-    if (dx < 0 && idx < plans.length - 1) selectPlan(plans[idx + 1].id)
-    else if (dx > 0 && idx > 0) selectPlan(plans[idx - 1].id)
+    const next = idx + dir
+    if (next >= 0 && next < plans.length) selectPlan(plans[next].id)
   }
 
   const addPlan = () =>
@@ -425,15 +414,35 @@ function App() {
             onUpdateExpense={updateExpense}
           />
         </div>
-        <div
-          className="touch-pan-y space-y-6 lg:col-span-2"
-          onPointerDown={handleSwipeStart}
-          onPointerUp={handleSwipeEnd}
-        >
+        <div className="space-y-6 lg:col-span-2">
           {plans.length > 1 && (
-            <p className="-mt-2 text-center text-[11px] text-slate-400 lg:hidden">
-              ← 左右スワイプでプラン切替 →
-            </p>
+            <div className="flex items-center justify-center gap-2 lg:hidden">
+              <button
+                type="button"
+                onClick={() => goPlan(-1)}
+                disabled={plans.findIndex((p) => p.id === activeId) <= 0}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                aria-label="前のプラン"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span className="min-w-[7rem] text-center text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {activePlan.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => goPlan(1)}
+                disabled={plans.findIndex((p) => p.id === activeId) >= plans.length - 1}
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                aria-label="次のプラン"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
+            </div>
           )}
           <StatHighlight result={result} />
           <div className="space-y-3">
@@ -488,7 +497,7 @@ function App() {
       <div className="fixed inset-x-0 bottom-3 z-20 px-3">
         <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 px-3 py-1.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
           <p className="mb-0.5 truncate text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
-            {plans.length > 1 ? `‹  ${activePlan.name}  ›` : activePlan.name}
+            {activePlan.name}
           </p>
           <div className="flex items-center justify-around gap-1.5">
             <div className="flex items-center gap-1.5">

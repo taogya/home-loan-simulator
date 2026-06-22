@@ -107,6 +107,7 @@ export function InputPanel({
   const [evYearsLater, setEvYearsLater] = useState('5');
   const [evLabel, setEvLabel] = useState('');
   const [evError, setEvError] = useState(false);
+  const [evSheetOpen, setEvSheetOpen] = useState(false);
   const [evAmount, setEvAmount] = useState('100');
   const [evRecurring, setEvRecurring] = useState(false);
   const [evInterval, setEvInterval] = useState('10');
@@ -127,11 +128,17 @@ export function InputPanel({
     setEvUntilAge(String(value.age + 30));
   };
 
+  const closeEvSheet = () => {
+    resetEventForm();
+    setEvSheetOpen(false);
+  };
+
   const startEditEvent = (e: LifeEvent) => {
     setEditingId(e.id);
     setEvYearsLater(String(Math.max(0, e.atAge - value.age)));
     setEvLabel(e.label);
     setEvError(false);
+    setEvSheetOpen(true);
     setEvAmount(String(e.amountMan));
     setEvRecurring((e.intervalYears ?? 0) > 0);
     setEvInterval(String(e.intervalYears || 10));
@@ -159,6 +166,7 @@ export function InputPanel({
       onAddEvent({ id: crypto.randomUUID(), ...payload });
     }
     resetEventForm();
+    setEvSheetOpen(false);
   };
 
   const availablePresets = EXPENSE_PRESETS.filter(
@@ -690,11 +698,30 @@ export function InputPanel({
             ))}
           </div>
         </div>
-        <div className="rounded-xl bg-white p-3 dark:bg-slate-900">
-          <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-            {editingId ? 'イベントを編集' : 'イベントを追加'}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            resetEventForm();
+            setEvSheetOpen(true);
+          }}
+          className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm font-medium text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-700"
+        >
+          ＋ 自由に追加（詳細を設定）
+        </button>
+        {evSheetOpen && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+            <button
+              type="button"
+              aria-label="閉じる"
+              className="absolute inset-0 cursor-default bg-slate-900/40 backdrop-blur-sm"
+              onClick={closeEvSheet}
+            />
+            <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden" />
+              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {editingId ? 'イベントを編集' : 'イベントを追加'}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
             <input
               type="number"
               value={evYearsLater}
@@ -790,22 +817,22 @@ export function InputPanel({
             >
               {editingId ? '更新' : '追加'}
             </button>
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetEventForm}
-                className="rounded-lg px-2 py-1 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                キャンセル
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={closeEvSheet}
+              className="rounded-lg px-2 py-1 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              キャンセル
+            </button>
             {evError && (
               <p className="w-full text-xs font-medium text-rose-500">
                 イベント名を入力してください
               </p>
             )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </CollapsibleSection>
         </div>
       )}
