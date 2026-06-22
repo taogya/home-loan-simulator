@@ -79,6 +79,10 @@ export function SavingsChart({ data, theme, events }: SavingsChartProps) {
   const axisColor = theme === 'dark' ? '#94a3b8' : '#64748b';
   const gridColor = theme === 'dark' ? '#1e293b' : '#e2e8f0';
   const hasNegative = rows.some((r) => r.savings < 0);
+  const dataMax = Math.max(...rows.map((r) => r.savings), 0);
+  const dataMin = Math.min(...rows.map((r) => r.savings), 0);
+  const zeroOffset =
+    dataMax - dataMin === 0 ? 1 : dataMax / (dataMax - dataMin);
   const startAge = data[0]?.age ?? 0;
   const endAge = data[data.length - 1]?.age ?? 0;
   const markers = groupEventsByAge(events, startAge, endAge);
@@ -95,8 +99,14 @@ export function SavingsChart({ data, theme, events }: SavingsChartProps) {
         <AreaChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="savingsGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+              <stop offset={0} stopColor="#10b981" stopOpacity={0.4} />
+              <stop offset={zeroOffset} stopColor="#10b981" stopOpacity={0.05} />
+              <stop offset={zeroOffset} stopColor="#f43f5e" stopOpacity={0.05} />
+              <stop offset={1} stopColor="#f43f5e" stopOpacity={0.4} />
+            </linearGradient>
+            <linearGradient id="savingsStroke" x1="0" y1="0" x2="0" y2="1">
+              <stop offset={zeroOffset} stopColor="#10b981" />
+              <stop offset={zeroOffset} stopColor="#f43f5e" />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
@@ -133,7 +143,7 @@ export function SavingsChart({ data, theme, events }: SavingsChartProps) {
           <Area
             type="monotone"
             dataKey="savings"
-            stroke="#10b981"
+            stroke="url(#savingsStroke)"
             strokeWidth={2.5}
             fill="url(#savingsGradient)"
           />

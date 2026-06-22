@@ -237,7 +237,7 @@ export function simulatePlan(form: FormState): PlanResult {
       .filter((e) => eventOccursAt(e, age))
       .reduce((sum, e) => sum + e.amountMan * 10000, 0);
     const cashBalance = income - annualExpense - yearRepayment - eventExpense;
-    savings += cashBalance;
+    savings += Number.isFinite(cashBalance) ? cashBalance : 0;
 
     // 繰上げ返済（積立方式・期間短縮型）：毎年積み立て、しきい値に達したら実行
     let prepayment = 0;
