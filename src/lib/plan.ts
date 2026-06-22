@@ -136,6 +136,7 @@ export function simulatePlan(form: FormState): PlanResult {
   const principal = form.loanAmountMan * 10000;
   const startAge = form.age;
   const years = form.years;
+  const simYears = Math.max(years, 100 - startAge);
   const rM = form.ratePct / 100 / 12;
   const rB = form.ratePct / 100 / 2;
 
@@ -170,7 +171,7 @@ export function simulatePlan(form: FormState): PlanResult {
     },
   ];
 
-  for (let y = 1; y <= years; y++) {
+  for (let y = 1; y <= simYears; y++) {
     const age = startAge + y;
     let yearPrincipal = 0;
     let yearInterest = 0;
