@@ -1,5 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Plan } from '../types';
+import { PLAN_COLORS } from '../lib/planColors';
+
+function TabIcon({ d, className }: { d: string[]; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className ?? 'h-4 w-4'}
+      aria-hidden
+    >
+      {d.map((p, i) => (
+        <path key={i} d={p} />
+      ))}
+    </svg>
+  );
+}
 
 interface PlanTabsProps {
   plans: Plan[];
@@ -9,6 +29,7 @@ interface PlanTabsProps {
   onDuplicate: () => void;
   onRemove: () => void;
   onRename: (id: string, name: string) => void;
+  onReorder: (fromId: string, toId: string) => void;
 }
 
 export function PlanTabs({
@@ -19,9 +40,17 @@ export function PlanTabs({
   onDuplicate,
   onRemove,
   onRename,
+  onReorder,
 }: PlanTabsProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }, [activeId]);
 
   const startRename = (id: string, current: string) => {
     setEditingId(id);
@@ -32,13 +61,55 @@ export function PlanTabs({
     setEditingId(null);
   };
 
-  const btnBase =
-    'rounded-lg border border-slate-200 px-2 py-1.5 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800';
+  const pointerStart = useRef<{
+    x: number;
+    y: number;
+    id: string;
+    moved: boolean;
+  } | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent, id: string) => {
+    if (editingId) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ポインタキャプチャ非対応でも続行
+    }
+    pointerStart.current = { x: e.clientX, y: e.clientY, id, moved: false };
+  };
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const start = pointerStart.current;
+    if (!start) return;
+    if (!start.moved) {
+      const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+      if (dist < 6) return;
+      start.moved = true;
+      setDragId(start.id);
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const tab = el?.closest('[data-plan-id]') as HTMLElement | null;
+    const overPlanId = tab?.dataset.planId ?? null;
+    setOverId(overPlanId && overPlanId !== start.id ? overPlanId : null);
+  };
+  const handlePointerUp = (id: string) => {
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (start && !start.moved) {
+      onSelect(id);
+    } else if (dragId && overId && dragId !== overId) {
+      onReorder(dragId, overId);
+    }
+    setDragId(null);
+    setOverId(null);
+  };
+
+  const iconBtn =
+    'flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800';
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex flex-wrap gap-1">
-        {plans.map((p) =>
+      <div className="flex flex-1 gap-1.5 overflow-x-auto pb-1">
+        {plans.map((p, idx) =>
           editingId === p.id ? (
             <input
               key={p.id}
@@ -56,27 +127,54 @@ export function PlanTabs({
           ) : (
             <button
               key={p.id}
+              ref={p.id === activeId ? activeRef : null}
               type="button"
-              onClick={() => onSelect(p.id)}
+              data-plan-id={p.id}
+              onPointerDown={(e) => handlePointerDown(e, p.id)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={() => handlePointerUp(p.id)}
               onDoubleClick={() => startRename(p.id, p.name)}
-              title="ダブルクリックで名前変更"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+              title="ドラッグで並び替え／ダブルクリックで名前変更"
+              className={`flex shrink-0 cursor-grab touch-none select-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition active:cursor-grabbing ${
                 p.id === activeId
-                  ? 'bg-indigo-600 text-white'
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                   : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700'
+              } ${dragId === p.id ? 'opacity-40' : ''} ${
+                overId === p.id ? 'ring-2 ring-indigo-400' : ''
               }`}
             >
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: PLAN_COLORS[idx % PLAN_COLORS.length] }}
+              />
               {p.name}
             </button>
           ),
         )}
       </div>
-      <div className="flex items-center gap-1 text-xs">
-        <button type="button" onClick={onAdd} className={btnBase}>
-          ＋追加
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onAdd}
+          className={iconBtn}
+          title="プランを追加"
+          aria-label="プランを追加"
+        >
+          <TabIcon d={['M12 5v14', 'M5 12h14']} />
         </button>
-        <button type="button" onClick={onDuplicate} className={btnBase}>
-          複製
+        <button
+          type="button"
+          onClick={onDuplicate}
+          className={iconBtn}
+          title="複製"
+          aria-label="プランを複製"
+        >
+          <TabIcon
+            d={[
+              'M9 9h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z',
+              'M5 15V5a2 2 0 0 1 2-2h8',
+            ]}
+          />
         </button>
         <button
           type="button"
@@ -84,9 +182,11 @@ export function PlanTabs({
             const target = plans.find((p) => p.id === activeId);
             if (target) startRename(target.id, target.name);
           }}
-          className={btnBase}
+          className={iconBtn}
+          title="名前変更"
+          aria-label="プラン名を変更"
         >
-          名前変更
+          <TabIcon d={['M12 20h9', 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z']} />
         </button>
         {plans.length > 1 && (
           <button
@@ -101,9 +201,18 @@ export function PlanTabs({
                 onRemove();
               }
             }}
-            className="rounded-lg border border-slate-200 px-2 py-1.5 text-slate-500 transition hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700 dark:text-slate-400"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-rose-50 hover:text-rose-500 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-rose-950/40"
+            title="削除"
+            aria-label="プランを削除"
           >
-            削除
+            <TabIcon
+              d={[
+                'M3 6h18',
+                'M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2',
+                'M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6',
+                'M10 11v6M14 11v6',
+              ]}
+            />
           </button>
         )}
       </div>

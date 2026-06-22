@@ -106,10 +106,13 @@ export function InputPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [evYearsLater, setEvYearsLater] = useState('5');
   const [evLabel, setEvLabel] = useState('');
+  const [evError, setEvError] = useState(false);
   const [evAmount, setEvAmount] = useState('100');
-  const [evInterval, setEvInterval] = useState(0);
-  const [evUntilAge, setEvUntilAge] = useState(value.age + 30);
+  const [evRecurring, setEvRecurring] = useState(false);
+  const [evInterval, setEvInterval] = useState('10');
+  const [evUntilAge, setEvUntilAge] = useState(String(value.age + 30));
   const [customExpenseLabel, setCustomExpenseLabel] = useState('');
+  const [expenseError, setExpenseError] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [expenseDraft, setExpenseDraft] = useState('');
 
@@ -117,31 +120,38 @@ export function InputPanel({
     setEditingId(null);
     setEvYearsLater('5');
     setEvLabel('');
+    setEvError(false);
     setEvAmount('100');
-    setEvInterval(0);
-    setEvUntilAge(value.age + 30);
+    setEvRecurring(false);
+    setEvInterval('10');
+    setEvUntilAge(String(value.age + 30));
   };
 
   const startEditEvent = (e: LifeEvent) => {
     setEditingId(e.id);
     setEvYearsLater(String(Math.max(0, e.atAge - value.age)));
     setEvLabel(e.label);
+    setEvError(false);
     setEvAmount(String(e.amountMan));
-    setEvInterval(e.intervalYears ?? 0);
-    setEvUntilAge(e.untilAge ?? value.age + 30);
+    setEvRecurring((e.intervalYears ?? 0) > 0);
+    setEvInterval(String(e.intervalYears || 10));
+    setEvUntilAge(String(e.untilAge ?? value.age + 30));
   };
 
   const handleSubmitEvent = () => {
     const label = evLabel.trim();
-    if (!label) return;
+    if (!label) {
+      setEvError(true);
+      return;
+    }
     const atAge = value.age + (Number(evYearsLater) || 0);
-    const recurring = evInterval > 0;
+    const recurring = evRecurring;
     const payload = {
       atAge,
       label,
       amountMan: Number(evAmount) || 0,
-      intervalYears: recurring ? evInterval : 0,
-      untilAge: recurring ? Math.max(atAge, evUntilAge) : undefined,
+      intervalYears: recurring ? Math.max(1, Number(evInterval) || 1) : 0,
+      untilAge: recurring ? Math.max(atAge, Number(evUntilAge) || atAge) : undefined,
     };
     if (editingId) {
       onUpdateEvent(editingId, payload);
@@ -158,7 +168,10 @@ export function InputPanel({
 
   const handleAddCustomExpense = () => {
     const label = customExpenseLabel.trim();
-    if (!label) return;
+    if (!label) {
+      setExpenseError(true);
+      return;
+    }
     onAddExpense({ id: crypto.randomUUID(), label, amountMan: 3 });
     setCustomExpenseLabel('');
   };
@@ -422,12 +435,15 @@ export function InputPanel({
                   <span>期間</span>
                   <input
                     type="number"
-                    value={e.startAfterYears ?? 0}
+                    value={e.startAfterYears ? e.startAfterYears : ''}
                     min={0}
                     max={50}
+                    placeholder="0"
                     onChange={(ev) =>
                       onUpdateExpense(e.id, {
-                        startAfterYears: Number(ev.target.value),
+                        startAfterYears: ev.target.value
+                          ? Number(ev.target.value)
+                          : 0,
                       })
                     }
                     className="w-12 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
@@ -488,18 +504,29 @@ export function InputPanel({
             type="text"
             value={customExpenseLabel}
             placeholder="例: 習い事"
-            onChange={(e) => setCustomExpenseLabel(e.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+            onChange={(e) => {
+              setCustomExpenseLabel(e.target.value);
+              if (expenseError) setExpenseError(false);
+            }}
+            className={`min-w-0 flex-1 rounded-lg border bg-white px-2 py-1 text-sm dark:bg-slate-900 ${
+              expenseError
+                ? 'border-rose-400 ring-1 ring-rose-300 dark:border-rose-500'
+                : 'border-slate-200 dark:border-slate-700'
+            }`}
             aria-label="支出項目名"
           />
           <button
             type="button"
             onClick={handleAddCustomExpense}
-            disabled={!customExpenseLabel.trim()}
-            className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
           >
             追加
           </button>
+          {expenseError && (
+            <p className="w-full text-xs font-medium text-rose-500">
+              支出項目名を入力してください
+            </p>
+          )}
         </div>
       </CollapsibleSection>
 
@@ -684,8 +711,15 @@ export function InputPanel({
               type="text"
               value={evLabel}
               placeholder="例: 車買い替え"
-              onChange={(e) => setEvLabel(e.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+              onChange={(e) => {
+                setEvLabel(e.target.value);
+                if (evError) setEvError(false);
+              }}
+              className={`min-w-0 flex-1 rounded-lg border bg-white px-2 py-1 text-sm dark:bg-slate-950 ${
+                evError
+                  ? 'border-rose-400 ring-1 ring-rose-300 dark:border-rose-500'
+                  : 'border-slate-200 dark:border-slate-700'
+              }`}
               aria-label="イベント名"
             />
             <input
@@ -702,9 +736,9 @@ export function InputPanel({
               <span className="text-xs text-slate-400">くりかえし</span>
               <button
                 type="button"
-                onClick={() => setEvInterval(0)}
+                onClick={() => setEvRecurring(false)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                  evInterval === 0
+                  !evRecurring
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                 }`}
@@ -713,25 +747,24 @@ export function InputPanel({
               </button>
               <button
                 type="button"
-                onClick={() => setEvInterval(evInterval > 0 ? evInterval : 10)}
+                onClick={() => setEvRecurring(true)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                  evInterval > 0
+                  evRecurring
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                 }`}
               >
                 定期
               </button>
-              {evInterval > 0 && (
+              {evRecurring && (
                 <>
                   <input
                     type="number"
                     value={evInterval}
                     min={1}
                     max={40}
-                    onChange={(e) =>
-                      setEvInterval(Math.max(1, Number(e.target.value)))
-                    }
+                    placeholder="10"
+                    onChange={(e) => setEvInterval(e.target.value)}
                     className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
                     aria-label="何年ごと"
                   />
@@ -741,7 +774,8 @@ export function InputPanel({
                     value={evUntilAge}
                     min={value.age}
                     max={100}
-                    onChange={(e) => setEvUntilAge(Number(e.target.value))}
+                    placeholder={String(value.age + 30)}
+                    onChange={(e) => setEvUntilAge(e.target.value)}
                     className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
                     aria-label="終了年齢"
                   />
@@ -752,8 +786,7 @@ export function InputPanel({
             <button
               type="button"
               onClick={handleSubmitEvent}
-              disabled={!evLabel.trim()}
-              className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
             >
               {editingId ? '更新' : '追加'}
             </button>
@@ -765,6 +798,11 @@ export function InputPanel({
               >
                 キャンセル
               </button>
+            )}
+            {evError && (
+              <p className="w-full text-xs font-medium text-rose-500">
+                イベント名を入力してください
+              </p>
             )}
           </div>
         </div>

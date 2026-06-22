@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { InputPanel } from './components/InputPanel'
 import { StatHighlight } from './components/StatHighlight'
 import { BalanceChart } from './components/BalanceChart'
@@ -16,11 +16,42 @@ import { useTheme } from './hooks/useTheme'
 
 const CHART_TABS = [
   { id: 'balance', label: '残高' },
-  { id: 'cashflow', label: 'キャッシュフロー' },
+  { id: 'cashflow', label: '収支' },
   { id: 'savings', label: '貯金' },
 ] as const
 
 type ChartTabId = (typeof CHART_TABS)[number]['id']
+
+function ChartTabIcon({ id }: { id: ChartTabId }) {
+  const common = {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: 'h-3.5 w-3.5',
+    'aria-hidden': true,
+  }
+  if (id === 'balance')
+    return (
+      <svg {...common}>
+        <path d="M20 7l-6 6-4-4-6 6" />
+      </svg>
+    )
+  if (id === 'cashflow')
+    return (
+      <svg {...common}>
+        <path d="M5 20V11M10 20V5M15 20V13M20 20V8" />
+      </svg>
+    )
+  return (
+    <svg {...common}>
+      <path d="M4 16l6-6 4 4 6-7" />
+      <path d="M4 21h16" />
+    </svg>
+  )
+}
 
 function SunIcon() {
   return (
@@ -188,6 +219,23 @@ function App() {
   const selectPlan = (id: string) =>
     setPlansState((prev) => ({ ...prev, activeId: id }))
 
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const handleSwipeStart = (e: ReactPointerEvent) => {
+    swipeStart.current = { x: e.clientX, y: e.clientY }
+  }
+  const handleSwipeEnd = (e: ReactPointerEvent) => {
+    const s = swipeStart.current
+    swipeStart.current = null
+    if (!s) return
+    const dx = e.clientX - s.x
+    const dy = e.clientY - s.y
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+    const idx = plans.findIndex((p) => p.id === activeId)
+    if (idx === -1) return
+    if (dx < 0 && idx < plans.length - 1) selectPlan(plans[idx + 1].id)
+    else if (dx > 0 && idx > 0) selectPlan(plans[idx - 1].id)
+  }
+
   const addPlan = () =>
     setPlansState((prev) => {
       const plan: Plan = {
@@ -221,6 +269,17 @@ function App() {
       ...prev,
       plans: prev.plans.map((p) => (p.id === id ? { ...p, name } : p)),
     }))
+
+  const reorderPlans = (fromId: string, toId: string) =>
+    setPlansState((prev) => {
+      const fromIdx = prev.plans.findIndex((p) => p.id === fromId)
+      const toIdx = prev.plans.findIndex((p) => p.id === toId)
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return prev
+      const plans = [...prev.plans]
+      const [moved] = plans.splice(fromIdx, 1)
+      plans.splice(toIdx, 0, moved)
+      return { ...prev, plans }
+    })
 
   const exportJson = () => {
     const data = JSON.stringify(plansState, null, 2)
@@ -343,6 +402,7 @@ function App() {
           onDuplicate={duplicatePlan}
           onRemove={removePlan}
           onRename={renamePlan}
+          onReorder={reorderPlans}
         />
       </div>
 
@@ -365,7 +425,16 @@ function App() {
             onUpdateExpense={updateExpense}
           />
         </div>
-        <div className="space-y-6 lg:col-span-2">
+        <div
+          className="touch-pan-y space-y-6 lg:col-span-2"
+          onPointerDown={handleSwipeStart}
+          onPointerUp={handleSwipeEnd}
+        >
+          {plans.length > 1 && (
+            <p className="-mt-2 text-center text-[11px] text-slate-400 lg:hidden">
+              ← 左右スワイプでプラン切替 →
+            </p>
+          )}
           <StatHighlight result={result} />
           <div className="space-y-3">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -374,12 +443,13 @@ function App() {
                   key={t.id}
                   type="button"
                   onClick={() => setChartTab(t.id)}
-                  className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
                     chartTab === t.id
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
                       : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
                   }`}
                 >
+                  <ChartTabIcon id={t.id} />
                   {t.label}
                 </button>
               ))}
@@ -415,76 +485,81 @@ function App() {
       </footer>
 
       {/* スクロール追従の結果サマリー */}
-      <div className="fixed inset-x-0 bottom-4 z-20 px-4">
-        <div className="mx-auto flex max-w-md items-center justify-around gap-2 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-                aria-hidden="true"
+      <div className="fixed inset-x-0 bottom-3 z-20 px-3">
+        <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 px-3 py-1.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+          <p className="mb-0.5 truncate text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
+            {plans.length > 1 ? `‹  ${activePlan.name}  ›` : activePlan.name}
+          </p>
+          <div className="flex items-center justify-around gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <path d="M16 2v4M8 2v4M3 10h18" />
+                </svg>
+              </span>
+              <div className="leading-tight">
+                <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                  完済
+                </p>
+                <p className="text-sm font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                  {result.payoffAge}
+                  <span className="text-[10px] font-medium">歳</span>
+                </p>
+              </div>
+            </div>
+            <div className="h-7 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9 9l3 4 3-4M9.5 13.5h5M9.5 16h5M12 13v4" />
+                </svg>
+              </span>
+              <div className="leading-tight">
+                <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                  毎月
+                </p>
+                <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                  {formatYen(result.monthlyPayment)}
+                  <span className="text-[10px] font-medium">円</span>
+                </p>
+              </div>
+            </div>
+            <div className="h-7 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-1.5">
+              <div className="leading-tight">
+                <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                  負担率
+                </p>
+                <p className={`text-sm font-bold tabular-nums ${burdenColor}`}>
+                  {result.repaymentBurdenPct.toFixed(0)}%
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${burdenBadge}`}
               >
-                <rect x="3" y="4" width="18" height="18" rx="2" />
-                <path d="M16 2v4M8 2v4M3 10h18" />
-              </svg>
-            </span>
-            <div className="leading-tight">
-              <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                完済予定
-              </p>
-              <p className="text-base font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
-                {result.payoffAge}
-                <span className="text-xs font-medium">歳</span>
-              </p>
+                {burdenLabel}
+              </span>
             </div>
-          </div>
-          <div className="h-9 w-px bg-slate-200 dark:bg-slate-800" />
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path d="M9 9l3 4 3-4M9.5 13.5h5M9.5 16h5M12 13v4" />
-              </svg>
-            </span>
-            <div className="leading-tight">
-              <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                毎月返済
-              </p>
-              <p className="text-base font-bold tabular-nums text-slate-900 dark:text-white">
-                {formatYen(result.monthlyPayment)}
-                <span className="text-xs font-medium">円</span>
-              </p>
-            </div>
-          </div>
-          <div className="h-9 w-px bg-slate-200 dark:bg-slate-800" />
-          <div className="flex items-center gap-2.5">
-            <div className="leading-tight">
-              <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                返済負担率
-              </p>
-              <p className={`text-base font-bold tabular-nums ${burdenColor}`}>
-                {result.repaymentBurdenPct.toFixed(0)}%
-              </p>
-            </div>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${burdenBadge}`}
-            >
-              {burdenLabel}
-            </span>
           </div>
         </div>
       </div>
