@@ -133,6 +133,18 @@ export function InputPanel({
     setEvSheetOpen(false);
   };
 
+  const openPresetSheet = (preset: (typeof LIFE_EVENT_PRESETS)[number]) => {
+    setEditingId(null);
+    setEvYearsLater(String(preset.yearsLater));
+    setEvLabel(preset.label);
+    setEvError(false);
+    setEvAmount(String(preset.amountMan));
+    setEvRecurring(false);
+    setEvInterval('10');
+    setEvUntilAge(String(value.age + 30));
+    setEvSheetOpen(true);
+  };
+
   const startEditEvent = (e: LifeEvent) => {
     setEditingId(e.id);
     setEvYearsLater(String(Math.max(0, e.atAge - value.age)));
@@ -683,14 +695,7 @@ export function InputPanel({
               <button
                 key={preset.label}
                 type="button"
-                onClick={() =>
-                  onAddEvent({
-                    id: crypto.randomUUID(),
-                    atAge: value.age + preset.yearsLater,
-                    label: preset.label,
-                    amountMan: preset.amountMan,
-                  })
-                }
+                onClick={() => openPresetSheet(preset)}
                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-700"
               >
                 ＋ {preset.label}

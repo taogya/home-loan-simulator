@@ -49,7 +49,13 @@ export function PlanTabs({
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    const el = activeRef.current;
+    const container = el?.parentElement;
+    if (el && container) {
+      const target =
+        el.offsetLeft - container.clientWidth / 2 + el.clientWidth / 2;
+      container.scrollTo({ left: target, behavior: 'smooth' });
+    }
   }, [activeId]);
 
   const startRename = (id: string, current: string) => {
