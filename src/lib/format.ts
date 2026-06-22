@@ -21,5 +21,5 @@ export function formatJpyCompact(value: number): string {
 
 /** 万円単位の数値を「3,500万円」のように表示する */
 export function formatManLabel(man: number): string {
-  return `${man.toLocaleString('ja-JP')}万円`;
+  return `${(man ?? 0).toLocaleString('ja-JP')}万円`;
 }

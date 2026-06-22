@@ -19,6 +19,7 @@ interface BalanceChartProps {
   theme: Theme;
   events: LifeEvent[];
   payoffAge: number;
+  isRent: boolean;
 }
 
 interface TooltipPayloadItem {
@@ -72,7 +73,22 @@ function formatYAxis(value: number): string {
   return value.toLocaleString('ja-JP');
 }
 
-export function BalanceChart({ schedule, theme, events, payoffAge }: BalanceChartProps) {
+export function BalanceChart({ schedule, theme, events, payoffAge, isRent }: BalanceChartProps) {
+  if (isRent) {
+    return (
+      <div className="card p-5">
+        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+          ローン残高の推移
+        </h3>
+        <p className="mb-3 text-xs text-slate-400 dark:text-slate-500">
+          横軸：年齢（歳）／縦軸：残高（万円）
+        </p>
+        <div className="flex h-[240px] items-center justify-center px-4 text-center text-sm text-slate-400 dark:text-slate-500">
+          賃貸プランのためローン残高はありません。「収支」「貯金」タブで家計の推移をご覧ください。
+        </div>
+      </div>
+    );
+  }
   const data = schedule.map((s) => ({
     age: s.age,
     balance: Math.round(s.loanBalance / 10000),

@@ -440,6 +440,7 @@ function App() {
                 theme={theme}
                 events={form.events}
                 payoffAge={result.payoffAge}
+                isRent={result.housingType === 'rent'}
               />
             )}
             {chartTab === 'cashflow' && (
@@ -525,12 +526,18 @@ function App() {
               </span>
               <div className="leading-tight">
                 <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  完済
+                  {result.housingType === 'rent' ? '住居' : '完済'}
                 </p>
-                <p className="text-sm font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
-                  {result.payoffAge}
-                  <span className="text-[10px] font-medium">歳</span>
-                </p>
+                {result.housingType === 'rent' ? (
+                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                    賃貸
+                  </p>
+                ) : (
+                  <p className="text-sm font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                    {result.payoffAge}
+                    <span className="text-[10px] font-medium">歳</span>
+                  </p>
+                )}
               </div>
             </div>
             <div className="h-7 w-px bg-slate-200 dark:bg-slate-800" />
@@ -555,7 +562,7 @@ function App() {
                   毎月
                 </p>
                 <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                  {formatYen(result.monthlyPayment)}
+                  {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
                   <span className="text-[10px] font-medium">円</span>
                 </p>
               </div>

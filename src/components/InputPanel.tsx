@@ -232,46 +232,103 @@ export function InputPanel({
       {open && (
         <div className="mt-6 space-y-6">
           <CollapsibleSection title="基本" defaultOpen>
+      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
+        {(
+          [
+            { id: 'own', label: '持ち家・ローン' },
+            { id: 'rent', label: '賃貸' },
+          ] as const
+        ).map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange({ housingType: opt.id })}
+            className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+              value.housingType === opt.id
+                ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {value.housingType === 'own' ? (
+        <>
+          <NumberSlider
+            label="借入額"
+            value={value.loanAmountMan}
+            min={0}
+            max={10000}
+            step={50}
+            onChange={(v) => onChange({ loanAmountMan: v })}
+            format={formatManLabel}
+            hint="物件価格から頭金を引いた額"
+          />
+          <NumberSlider
+            label="金利（年）"
+            value={value.ratePct}
+            min={0}
+            max={5}
+            step={0.05}
+            onChange={(v) => onChange({ ratePct: v })}
+            format={(v) => `${v.toFixed(2)}%`}
+            hint="固定は変動より高め。金融機関によって異なります"
+          />
+          <NumberSlider
+            label="返済期間"
+            value={value.years}
+            min={1}
+            max={50}
+            step={1}
+            onChange={(v) => onChange({ years: v })}
+            format={(v) => `${v}年`}
+            hint="最長35年が一般的"
+          />
+        </>
+      ) : (
+        <>
+          <NumberSlider
+            label="家賃（月額）"
+            value={value.rentMan}
+            min={0}
+            max={50}
+            step={1}
+            onChange={(v) => onChange({ rentMan: v })}
+            format={(v) => `${v}万円/月`}
+            hint="管理費・共益費も含めた毎月の支払い"
+          />
+          <NumberSlider
+            label="更新料"
+            value={value.renewalFeeMan}
+            min={0}
+            max={50}
+            step={1}
+            onChange={(v) => onChange({ renewalFeeMan: v })}
+            format={formatManLabel}
+            hint="更新時にかかる費用（家賃1〜2ヶ月分が目安）"
+          />
+          <NumberSlider
+            label="更新間隔"
+            value={value.renewalIntervalYears}
+            min={1}
+            max={5}
+            step={1}
+            onChange={(v) => onChange({ renewalIntervalYears: v })}
+            format={(v) => `${v}年ごと`}
+            hint="一般的な賃貸は2年ごと"
+          />
+        </>
+      )}
       <NumberSlider
-        label="借入額"
-        value={value.loanAmountMan}
-        min={0}
-        max={10000}
-        step={50}
-        onChange={(v) => onChange({ loanAmountMan: v })}
-        format={formatManLabel}
-        hint="物件価格から頭金を引いた額"
-      />
-      <NumberSlider
-        label="金利（年）"
-        value={value.ratePct}
-        min={0}
-        max={5}
-        step={0.05}
-        onChange={(v) => onChange({ ratePct: v })}
-        format={(v) => `${v.toFixed(2)}%`}
-        hint="固定は変動より高め。金融機関によって異なります"
-      />
-      <NumberSlider
-        label="返済期間"
-        value={value.years}
-        min={1}
-        max={50}
-        step={1}
-        onChange={(v) => onChange({ years: v })}
-        format={(v) => `${v}年`}
-        hint="最長35年が一般的"
-      />
-      <NumberSlider
-
-        label="借入時の年齢"
+        label="現在の年齢"
         value={value.age}
         min={18}
         max={70}
         step={1}
         onChange={(v) => onChange({ age: v })}
         format={(v) => `${v}歳`}
-        hint="完済年齢の計算に使います"
+        hint="シミュレーション開始の年齢"
       />
           </CollapsibleSection>
 

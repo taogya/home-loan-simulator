@@ -31,6 +31,10 @@ export interface ExpenseItem {
 }
 
 export interface FormState {
+  // 住居タイプ
+  /** 住居タイプ（own=持ち家・ローン / rent=賃貸） */
+  housingType: 'own' | 'rent';
+
   // ローン条件
   /** 借入額（万円） */
   loanAmountMan: number;
@@ -40,6 +44,14 @@ export interface FormState {
   years: number;
   /** 借入開始時の年齢（歳） */
   age: number;
+
+  // 賃貸条件（housingType==='rent' のとき使用）
+  /** 家賃（万円/月） */
+  rentMan: number;
+  /** 更新料（万円・更新時に発生） */
+  renewalFeeMan: number;
+  /** 更新間隔（年） */
+  renewalIntervalYears: number;
 
   // 収入
   /** 月給（額面・税引き前, 万円/月） */
@@ -89,10 +101,14 @@ export interface FormState {
 }
 
 export const DEFAULT_FORM: FormState = {
+  housingType: 'own',
   loanAmountMan: 3500,
   ratePct: 1.0,
   years: 35,
   age: 35,
+  rentMan: 12,
+  renewalFeeMan: 12,
+  renewalIntervalYears: 2,
   monthlySalaryMan: 30,
   bonusMonths: 4,
   raiseRatePct: 1.5,

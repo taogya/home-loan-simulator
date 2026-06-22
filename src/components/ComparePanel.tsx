@@ -84,22 +84,37 @@ export function ComparePanel({ plans, theme }: ComparePanelProps) {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             <CompareRow
               label="完済年齢"
-              values={results.map((r) => `${r.result.payoffAge}歳`)}
+              values={results.map((r) =>
+                r.result.housingType === 'rent'
+                  ? '賃貸'
+                  : `${r.result.payoffAge}歳`,
+              )}
             />
             <CompareRow
-              label="毎月返済"
-              values={results.map((r) => `${formatYen(r.result.monthlyPayment)}円`)}
+              label="毎月の支払い"
+              values={results.map(
+                (r) =>
+                  `${formatYen(r.result.housingType === 'rent' ? r.result.monthlyRent : r.result.monthlyPayment)}円`,
+              )}
             />
             <CompareRow
               label="総利息"
-              values={results.map((r) => formatJpyCompact(r.result.totalInterest))}
+              values={results.map((r) =>
+                r.result.housingType === 'rent'
+                  ? '—'
+                  : formatJpyCompact(r.result.totalInterest),
+              )}
             />
             <CompareRow
               label="総返済"
-              values={results.map((r) => formatJpyCompact(r.result.totalPayment))}
+              values={results.map((r) =>
+                r.result.housingType === 'rent'
+                  ? '—'
+                  : formatJpyCompact(r.result.totalPayment),
+              )}
             />
             <CompareRow
-              label="返済負担率"
+              label="住居費の負担率"
               values={results.map((r) => `${r.result.repaymentBurdenPct.toFixed(0)}%`)}
             />
           </tbody>

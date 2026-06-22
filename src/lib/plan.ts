@@ -33,6 +33,14 @@ export interface PlanYear {
 }
 
 export interface PlanResult {
+  /** 住居タイプ（own=持ち家 / rent=賃貸） */
+  housingType: 'own' | 'rent';
+  /** 賃貸の毎月の家賃（円。持ち家は0） */
+  monthlyRent: number;
+  /** 賃貸の更新料（円。持ち家は0） */
+  renewalFee: number;
+  /** 賃貸の更新間隔（年） */
+  renewalIntervalYears: number;
   /** 毎月の返済額（円） */
   monthlyPayment: number;
   /** ボーナス1回の返済額（円） */
@@ -133,7 +141,8 @@ function expenseActiveAt(e: ExpenseItem, elapsedYears: number): boolean {
 }
 
 export function simulatePlan(form: FormState): PlanResult {
-  const principal = form.loanAmountMan * 10000;
+  const isRent = form.housingType === 'rent';
+  const principal = isRent ? 0 : form.loanAmountMan * 10000;
   const startAge = form.age;
   const years = form.years;
   const simYears = Math.max(years, 100 - startAge);
@@ -141,18 +150,18 @@ export function simulatePlan(form: FormState): PlanResult {
   const rB = form.ratePct / 100 / 2;
 
   // ボーナス払い：1回の固定返済額から、ボーナスで返す元金（現在価値）を求める
-  const bonus = Math.max(0, form.bonusRepayMan * 10000);
+  const bonus = isRent ? 0 : Math.max(0, form.bonusRepayMan * 10000);
   const bonusPrincipal = Math.min(presentValue(bonus, rB, years * 2), principal);
   const monthlyPrincipal = principal - bonusPrincipal;
-  const monthly = annuity(monthlyPrincipal, rM, years * 12);
+  const monthly = isRent ? 0 : annuity(monthlyPrincipal, rM, years * 12);
 
   let balM = monthlyPrincipal;
   let balB = bonusPrincipal;
   let savings = form.initialSavingsMan * 10000;
   let pot = 0;
   let totalInterest = 0;
-  let payoffYears = years;
-  let payoffFound = false;
+  let payoffYears = isRent ? 0 : years;
+  let payoffFound = isRent;
 
   const schedule: PlanYear[] = [
     {
@@ -227,15 +236,24 @@ export function simulatePlan(form: FormState): PlanResult {
       retirementBonus +
       form.spouseIncomeMan * 10000 +
       form.sideIncomeMan * 10000;
+    const rentAnnual = isRent ? form.rentMan * 12 * 10000 : 0;
+    const renewalFee =
+      isRent &&
+      form.renewalIntervalYears > 0 &&
+      y % form.renewalIntervalYears === 0
+        ? form.renewalFeeMan * 10000
+        : 0;
     const annualExpense =
       form.expenses
         .filter((e) => expenseActiveAt(e, age - startAge))
         .reduce((sum, e) => sum + e.amountMan, 0) *
-      12 *
-      10000;
-    const eventExpense = form.events
-      .filter((e) => eventOccursAt(e, age))
-      .reduce((sum, e) => sum + e.amountMan * 10000, 0);
+        12 *
+        10000 +
+      rentAnnual;
+    const eventExpense =
+      form.events
+        .filter((e) => eventOccursAt(e, age))
+        .reduce((sum, e) => sum + e.amountMan * 10000, 0) + renewalFee;
     const cashBalance = income - annualExpense - yearRepayment - eventExpense;
     savings += Number.isFinite(cashBalance) ? cashBalance : 0;
 
@@ -288,9 +306,11 @@ export function simulatePlan(form: FormState): PlanResult {
     });
   }
 
-  const annualRepayment = monthly * 12 + bonus * 2;
+  const annualRepayment = isRent
+    ? form.rentMan * 12 * 10000
+    : monthly * 12 + bonus * 2;
   const totalPayment = principal + totalInterest;
-  const payoffAge = startAge + payoffYears;
+  const payoffAge = isRent ? 0 : startAge + payoffYears;
   const grossAnnualNow = form.monthlySalaryMan * 10000 * (12 + form.bonusMonths);
   const netAnnualNow =
     estimateTakeHome(grossAnnualNow) +
@@ -300,6 +320,10 @@ export function simulatePlan(form: FormState): PlanResult {
     netAnnualNow > 0 ? (annualRepayment / netAnnualNow) * 100 : 0;
 
   return {
+    housingType: form.housingType,
+    monthlyRent: isRent ? form.rentMan * 10000 : 0,
+    renewalFee: isRent ? form.renewalFeeMan * 10000 : 0,
+    renewalIntervalYears: form.renewalIntervalYears,
     monthlyPayment: monthly,
     bonusPayment: bonus,
     annualRepayment,
