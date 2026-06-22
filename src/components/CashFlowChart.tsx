@@ -4,6 +4,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,6 +16,7 @@ import type { Theme } from '../hooks/useTheme';
 interface CashFlowChartProps {
   data: PlanYear[];
   theme: Theme;
+  payoffAge: number;
 }
 
 interface ChartRow {
@@ -68,7 +70,7 @@ function CFTooltip({ active, payload }: CFTooltipProps) {
   );
 }
 
-export function CashFlowChart({ data, theme }: CashFlowChartProps) {
+export function CashFlowChart({ data, theme, payoffAge }: CashFlowChartProps) {
   const rows: ChartRow[] = data
     .filter((d) => d.year >= 1)
     .map((d) => ({
@@ -110,6 +112,20 @@ export function CashFlowChart({ data, theme }: CashFlowChartProps) {
           />
           <Tooltip content={<CFTooltip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
+          {payoffAge > 0 && (
+            <ReferenceLine
+              x={payoffAge}
+              stroke="#6366f1"
+              strokeWidth={1.5}
+              label={{
+                value: 'ローン完済',
+                position: 'insideTopLeft',
+                fontSize: 10,
+                fill: '#6366f1',
+                fontWeight: 600,
+              }}
+            />
+          )}
           <Bar dataKey="暮らし" stackId="out" fill="#94a3b8" maxBarSize={26} />
           <Bar dataKey="ローン" stackId="out" fill="#6366f1" maxBarSize={26} />
           <Bar dataKey="イベント" stackId="out" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={26} />

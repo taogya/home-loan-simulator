@@ -18,6 +18,7 @@ interface SavingsChartProps {
   data: PlanYear[];
   theme: Theme;
   events: LifeEvent[];
+  payoffAge: number;
 }
 
 interface ChartRow {
@@ -70,7 +71,7 @@ function SavingsTooltip({ active, payload, markers }: SavingsTooltipProps) {
   );
 }
 
-export function SavingsChart({ data, theme, events }: SavingsChartProps) {
+export function SavingsChart({ data, theme, events, payoffAge }: SavingsChartProps) {
   const rows: ChartRow[] = data.map((d) => ({
     age: d.age,
     savings: Math.round(d.savings / 10000),
@@ -126,6 +127,20 @@ export function SavingsChart({ data, theme, events }: SavingsChartProps) {
           />
           <Tooltip content={<SavingsTooltip markers={markers} />} />
           <ReferenceLine y={0} stroke="#f43f5e" strokeDasharray="4 2" />
+          {payoffAge > startAge && payoffAge <= endAge && (
+            <ReferenceLine
+              x={payoffAge}
+              stroke="#6366f1"
+              strokeWidth={1.5}
+              label={{
+                value: 'ローン完済',
+                position: 'insideTopLeft',
+                fontSize: 10,
+                fill: '#6366f1',
+                fontWeight: 600,
+              }}
+            />
+          )}
           {markers.map((m) => (
             <ReferenceLine
               key={m.atAge}

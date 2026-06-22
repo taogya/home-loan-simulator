@@ -439,16 +439,22 @@ function App() {
                 schedule={result.schedule}
                 theme={theme}
                 events={form.events}
+                payoffAge={result.payoffAge}
               />
             )}
             {chartTab === 'cashflow' && (
-              <CashFlowChart data={result.schedule} theme={theme} />
+              <CashFlowChart
+                data={result.schedule}
+                theme={theme}
+                payoffAge={result.payoffAge}
+              />
             )}
             {chartTab === 'savings' && (
               <SavingsChart
                 data={result.schedule}
                 theme={theme}
                 events={form.events}
+                payoffAge={result.payoffAge}
               />
             )}
           </div>

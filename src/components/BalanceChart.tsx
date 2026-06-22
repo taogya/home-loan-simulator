@@ -18,6 +18,7 @@ interface BalanceChartProps {
   schedule: PlanYear[];
   theme: Theme;
   events: LifeEvent[];
+  payoffAge: number;
 }
 
 interface TooltipPayloadItem {
@@ -71,7 +72,7 @@ function formatYAxis(value: number): string {
   return value.toLocaleString('ja-JP');
 }
 
-export function BalanceChart({ schedule, theme, events }: BalanceChartProps) {
+export function BalanceChart({ schedule, theme, events, payoffAge }: BalanceChartProps) {
   const data = schedule.map((s) => ({
     age: s.age,
     balance: Math.round(s.loanBalance / 10000),
@@ -120,6 +121,20 @@ export function BalanceChart({ schedule, theme, events }: BalanceChartProps) {
             tickFormatter={formatYAxis}
           />
           <Tooltip content={<ChartTooltip markers={markers} />} />
+          {payoffAge > startAge && payoffAge <= endAge && (
+            <ReferenceLine
+              x={payoffAge}
+              stroke="#6366f1"
+              strokeWidth={1.5}
+              label={{
+                value: 'ローン完済',
+                position: 'insideTopLeft',
+                fontSize: 10,
+                fill: '#6366f1',
+                fontWeight: 600,
+              }}
+            />
+          )}
           {markers.map((m) => (
             <ReferenceLine
               key={m.atAge}
