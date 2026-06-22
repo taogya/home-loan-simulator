@@ -104,9 +104,9 @@ export function InputPanel({
 }: InputPanelProps) {
   const [open, setOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [evYearsLater, setEvYearsLater] = useState(5);
+  const [evYearsLater, setEvYearsLater] = useState('5');
   const [evLabel, setEvLabel] = useState('');
-  const [evAmount, setEvAmount] = useState(100);
+  const [evAmount, setEvAmount] = useState('100');
   const [evInterval, setEvInterval] = useState(0);
   const [evUntilAge, setEvUntilAge] = useState(value.age + 30);
   const [customExpenseLabel, setCustomExpenseLabel] = useState('');
@@ -115,18 +115,18 @@ export function InputPanel({
 
   const resetEventForm = () => {
     setEditingId(null);
-    setEvYearsLater(5);
+    setEvYearsLater('5');
     setEvLabel('');
-    setEvAmount(100);
+    setEvAmount('100');
     setEvInterval(0);
     setEvUntilAge(value.age + 30);
   };
 
   const startEditEvent = (e: LifeEvent) => {
     setEditingId(e.id);
-    setEvYearsLater(Math.max(0, e.atAge - value.age));
+    setEvYearsLater(String(Math.max(0, e.atAge - value.age)));
     setEvLabel(e.label);
-    setEvAmount(e.amountMan);
+    setEvAmount(String(e.amountMan));
     setEvInterval(e.intervalYears ?? 0);
     setEvUntilAge(e.untilAge ?? value.age + 30);
   };
@@ -134,12 +134,12 @@ export function InputPanel({
   const handleSubmitEvent = () => {
     const label = evLabel.trim();
     if (!label) return;
-    const atAge = value.age + evYearsLater;
+    const atAge = value.age + (Number(evYearsLater) || 0);
     const recurring = evInterval > 0;
     const payload = {
       atAge,
       label,
-      amountMan: evAmount,
+      amountMan: Number(evAmount) || 0,
       intervalYears: recurring ? evInterval : 0,
       untilAge: recurring ? Math.max(atAge, evUntilAge) : undefined,
     };
@@ -317,6 +317,16 @@ export function InputPanel({
           onChange={(v) => onChange({ retireAge: v })}
           format={(v) => `${v}歳`}
           hint="給与収入が止まる年齢"
+        />
+        <NumberSlider
+          label="退職金"
+          value={value.retirementBonusMan}
+          min={0}
+          max={5000}
+          step={100}
+          onChange={(v) => onChange({ retirementBonusMan: v })}
+          format={formatManLabel}
+          hint="定年時に受け取る一時金（目安1,000〜2,000万円）"
         />
         <NumberSlider
           label="年金（手取り月額）"
@@ -663,12 +673,12 @@ export function InputPanel({
               value={evYearsLater}
               min={0}
               max={60}
-              onChange={(e) => setEvYearsLater(Number(e.target.value))}
+              onChange={(e) => setEvYearsLater(e.target.value)}
               className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
               aria-label="何年後"
             />
             <span className="text-xs text-slate-400">
-              年後（{value.age + evYearsLater}歳）
+              年後（{value.age + (Number(evYearsLater) || 0)}歳）
             </span>
             <input
               type="text"
@@ -683,7 +693,7 @@ export function InputPanel({
               value={evAmount}
               min={0}
               step={10}
-              onChange={(e) => setEvAmount(Number(e.target.value))}
+              onChange={(e) => setEvAmount(e.target.value)}
               className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
               aria-label="金額（万円）"
             />

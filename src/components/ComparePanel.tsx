@@ -25,6 +25,10 @@ const PLAN_COLORS = [
   '#ec4899',
   '#06b6d4',
   '#8b5cf6',
+  '#ef4444',
+  '#14b8a6',
+  '#f97316',
+  '#3b82f6',
 ];
 
 function CompareRow({ label, values }: { label: string; values: string[] }) {

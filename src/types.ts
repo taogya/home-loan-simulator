@@ -62,6 +62,8 @@ export interface FormState {
   pensionStartAge: number;
   /** 年金の手取り月額（万円） */
   pensionMonthlyMan: number;
+  /** 退職金（一時金・万円。定年時に受け取る） */
+  retirementBonusMan: number;
 
   // 支出（毎月・万円）
   /** 毎月の支出項目（追加式・定番＋自由ラベル） */
@@ -100,6 +102,7 @@ export const DEFAULT_FORM: FormState = {
   retireAge: 65,
   pensionStartAge: 65,
   pensionMonthlyMan: 15,
+  retirementBonusMan: 1000,
   expenses: [
     { id: 'exp-living', label: '生活費', amountMan: 20 },
     { id: 'exp-insurance', label: '保険', amountMan: 2 },

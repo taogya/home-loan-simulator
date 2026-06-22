@@ -13,7 +13,7 @@ export function eventOccursAt(e: LifeEvent, age: number): boolean {
   if (age < e.atAge) return false;
   const interval = e.intervalYears ?? 0;
   if (interval <= 0) return age === e.atAge;
-  if (e.untilAge !== undefined && age > e.untilAge) return false;
+  if (e.untilAge && e.untilAge > 0 && age > e.untilAge) return false;
   return (age - e.atAge) % interval === 0;
 }
 
@@ -37,7 +37,7 @@ export function groupEventsByAge(
     if (interval <= 0) {
       if (e.atAge >= startAge && e.atAge <= endAge) add(e.atAge, e.label, e.amountMan);
     } else {
-      const until = e.untilAge ?? endAge;
+      const until = e.untilAge && e.untilAge > 0 ? e.untilAge : endAge;
       for (let age = e.atAge; age <= Math.min(until, endAge); age += interval) {
         if (age >= startAge) add(age, e.label, e.amountMan);
       }

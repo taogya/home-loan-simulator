@@ -219,8 +219,11 @@ export function simulatePlan(form: FormState): PlanResult {
     } else if (age >= form.pensionStartAge) {
       personalIncome = form.pensionMonthlyMan * 10000 * 12;
     }
+    const retirementBonus =
+      age === form.retireAge ? form.retirementBonusMan * 10000 : 0;
     const income =
       personalIncome +
+      retirementBonus +
       form.spouseIncomeMan * 10000 +
       form.sideIncomeMan * 10000;
     const annualExpense =
