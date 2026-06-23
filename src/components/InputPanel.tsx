@@ -29,17 +29,19 @@ const LIFE_EVENT_PRESETS: {
   label: string;
   amountMan: number;
   yearsLater: number;
+  intervalYears?: number;
+  untilAge?: number;
 }[] = [
-  { label: '車の買い替え', amountMan: 150, yearsLater: 7 },
-  { label: 'リフォーム', amountMan: 300, yearsLater: 15 },
-  { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 12 },
-  { label: '給湯器の交換', amountMan: 30, yearsLater: 12 },
-  { label: 'エアコン買い替え', amountMan: 15, yearsLater: 10 },
+  { label: '車の買い替え', amountMan: 150, yearsLater: 10, intervalYears: 10, untilAge: 75 },
+  { label: 'リフォーム', amountMan: 300, yearsLater: 20, intervalYears: 20, untilAge: 100 },
+  { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 15, intervalYears: 15, untilAge: 100 },
+  { label: '給湯器の交換', amountMan: 50, yearsLater: 15, intervalYears: 15, untilAge: 100 },
+  { label: 'エアコン買い替え', amountMan: 15, yearsLater: 10, intervalYears: 10, untilAge: 100 },
   { label: '出産', amountMan: 50, yearsLater: 2 },
   { label: '入学（大学）', amountMan: 100, yearsLater: 18 },
   { label: '結婚式', amountMan: 300, yearsLater: 3 },
   { label: '家族旅行', amountMan: 30, yearsLater: 5 },
-  { label: '家電の買い替え', amountMan: 20, yearsLater: 8 },
+  { label: '家電の買い替え', amountMan: 50, yearsLater: 10, intervalYears: 10, untilAge: 100 },
 ];
 
 interface InputPanelProps {
@@ -139,9 +141,10 @@ export function InputPanel({
     setEvLabel(preset.label);
     setEvError(false);
     setEvAmount(String(preset.amountMan));
-    setEvRecurring(false);
-    setEvInterval('10');
-    setEvUntilAge(String(value.age + 30));
+    const recurring = (preset.intervalYears ?? 0) > 0;
+    setEvRecurring(recurring);
+    setEvInterval(String(preset.intervalYears ?? 10));
+    setEvUntilAge(String(preset.untilAge ?? value.age + 30));
     setEvSheetOpen(true);
   };
 

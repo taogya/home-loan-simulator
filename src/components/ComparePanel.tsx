@@ -2,6 +2,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -171,6 +172,13 @@ export function ComparePanel({ plans, theme }: ComparePanelProps) {
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={savingsChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+            <ReferenceArea
+              y1={-1000000}
+              y2={0}
+              fill="#f43f5e"
+              fillOpacity={0.06}
+              ifOverflow="hidden"
+            />
             <XAxis
               dataKey="age"
               tick={{ fill: axisColor, fontSize: 12 }}
