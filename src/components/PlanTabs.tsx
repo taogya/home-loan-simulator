@@ -71,40 +71,97 @@ export function PlanTabs({
     x: number;
     y: number;
     id: string;
-    moved: boolean;
+    dragging: boolean;
+    immediate: boolean;
   } | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
 
   const handlePointerDown = (e: React.PointerEvent, id: string) => {
     if (editingId) return;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // ポインタキャプチャ非対応でも続行
+    const pointerId = e.pointerId;
+    const target = e.currentTarget;
+    const isMouse = e.pointerType === 'mouse';
+    pointerStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      id,
+      dragging: false,
+      immediate: isMouse,
+    };
+    clearLongPress();
+    if (isMouse) {
+      // マウスは即ドラッグ可（少し動かすと並び替え開始）
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        // 非対応でも続行
+      }
+      return;
     }
-    pointerStart.current = { x: e.clientX, y: e.clientY, id, moved: false };
+    // タッチは長押し（約450ms静止）で並び替え。通常タッチは横スクロール。
+    longPressTimer.current = window.setTimeout(() => {
+      const s = pointerStart.current;
+      if (!s || s.id !== id) return;
+      s.dragging = true;
+      setDragId(id);
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        // 非対応でも続行
+      }
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(12);
+      }
+    }, 450);
   };
   const handlePointerMove = (e: React.PointerEvent) => {
     const start = pointerStart.current;
     if (!start) return;
-    if (!start.moved) {
+    if (!start.dragging) {
       const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
-      if (dist < 6) return;
-      start.moved = true;
-      setDragId(start.id);
+      if (start.immediate) {
+        // マウス：少し動かすと並び替え開始
+        if (dist > 6) {
+          start.dragging = true;
+          setDragId(start.id);
+        }
+      } else if (dist > 8) {
+        // タッチ：動いたら横スクロール優先（長押しをキャンセル）
+        clearLongPress();
+        pointerStart.current = null;
+        return;
+      }
+      if (!start.dragging) return;
     }
+    // 並び替え中：スクロールを抑制してドラッグ
+    e.preventDefault();
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const tab = el?.closest('[data-plan-id]') as HTMLElement | null;
     const overPlanId = tab?.dataset.planId ?? null;
     setOverId(overPlanId && overPlanId !== start.id ? overPlanId : null);
   };
   const handlePointerUp = (id: string) => {
+    clearLongPress();
     const start = pointerStart.current;
     pointerStart.current = null;
-    if (start && !start.moved) {
+    if (start && !start.dragging) {
       onSelect(id);
     } else if (dragId && overId && dragId !== overId) {
       onReorder(dragId, overId);
     }
+    setDragId(null);
+    setOverId(null);
+  };
+  const handlePointerCancel = () => {
+    clearLongPress();
+    pointerStart.current = null;
     setDragId(null);
     setOverId(null);
   };
@@ -139,9 +196,11 @@ export function PlanTabs({
               onPointerDown={(e) => handlePointerDown(e, p.id)}
               onPointerMove={handlePointerMove}
               onPointerUp={() => handlePointerUp(p.id)}
+              onPointerCancel={handlePointerCancel}
               onDoubleClick={() => startRename(p.id, p.name)}
-              title="ドラッグで並び替え／ダブルクリックで名前変更"
-              className={`flex shrink-0 cursor-grab touch-none select-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition active:cursor-grabbing ${
+              title="長押しで並び替え／ダブルクリックで名前変更"
+              style={{ touchAction: dragId === p.id ? 'none' : 'pan-x' }}
+              className={`flex shrink-0 cursor-grab select-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition active:cursor-grabbing ${
                 p.id === activeId
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                   : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700'
