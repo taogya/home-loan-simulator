@@ -44,8 +44,7 @@ export function PlanTabs({
 }: PlanTabsProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  const [reorderOpen, setReorderOpen] = useState(false);
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -71,8 +70,8 @@ export function PlanTabs({
     x: number;
     y: number;
     id: string;
-    dragging: boolean;
-    immediate: boolean;
+    moved: boolean;
+    fired: boolean;
   } | null>(null);
   const longPressTimer = useRef<number | null>(null);
 
@@ -83,87 +82,54 @@ export function PlanTabs({
     }
   };
 
+  // タップで選択、長押しで並び替えダイアログを開く。横方向の動きはスクロールに任せる。
   const handlePointerDown = (e: React.PointerEvent, id: string) => {
     if (editingId) return;
-    const pointerId = e.pointerId;
-    const target = e.currentTarget;
-    const isMouse = e.pointerType === 'mouse';
     pointerStart.current = {
       x: e.clientX,
       y: e.clientY,
       id,
-      dragging: false,
-      immediate: isMouse,
+      moved: false,
+      fired: false,
     };
     clearLongPress();
-    if (isMouse) {
-      // マウスは即ドラッグ可（少し動かすと並び替え開始）
-      try {
-        target.setPointerCapture(pointerId);
-      } catch {
-        // 非対応でも続行
-      }
-      return;
-    }
-    // タッチは長押し（約450ms静止）で並び替え。通常タッチは横スクロール。
     longPressTimer.current = window.setTimeout(() => {
       const s = pointerStart.current;
-      if (!s || s.id !== id) return;
-      s.dragging = true;
-      setDragId(id);
-      try {
-        target.setPointerCapture(pointerId);
-      } catch {
-        // 非対応でも続行
-      }
+      if (!s || s.id !== id || s.moved) return;
+      s.fired = true;
+      setReorderOpen(true);
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate(12);
       }
-    }, 450);
+    }, 500);
   };
   const handlePointerMove = (e: React.PointerEvent) => {
     const start = pointerStart.current;
-    if (!start) return;
-    if (!start.dragging) {
-      const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
-      if (start.immediate) {
-        // マウス：少し動かすと並び替え開始
-        if (dist > 6) {
-          start.dragging = true;
-          setDragId(start.id);
-        }
-      } else if (dist > 8) {
-        // タッチ：動いたら横スクロール優先（長押しをキャンセル）
-        clearLongPress();
-        pointerStart.current = null;
-        return;
-      }
-      if (!start.dragging) return;
+    if (!start || start.moved) return;
+    const dist = Math.hypot(e.clientX - start.x, e.clientY - start.y);
+    if (dist > 8) {
+      start.moved = true;
+      clearLongPress();
     }
-    // 並び替え中：スクロールを抑制してドラッグ
-    e.preventDefault();
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const tab = el?.closest('[data-plan-id]') as HTMLElement | null;
-    const overPlanId = tab?.dataset.planId ?? null;
-    setOverId(overPlanId && overPlanId !== start.id ? overPlanId : null);
   };
   const handlePointerUp = (id: string) => {
     clearLongPress();
     const start = pointerStart.current;
     pointerStart.current = null;
-    if (start && !start.dragging) {
+    if (start && !start.moved && !start.fired) {
       onSelect(id);
-    } else if (dragId && overId && dragId !== overId) {
-      onReorder(dragId, overId);
     }
-    setDragId(null);
-    setOverId(null);
   };
   const handlePointerCancel = () => {
     clearLongPress();
     pointerStart.current = null;
-    setDragId(null);
-    setOverId(null);
+  };
+
+  const movePlan = (id: string, dir: -1 | 1) => {
+    const idx = plans.findIndex((p) => p.id === id);
+    const target = idx + dir;
+    if (idx === -1 || target < 0 || target >= plans.length) return;
+    onReorder(id, plans[target].id);
   };
 
   const iconBtn =
@@ -171,7 +137,7 @@ export function PlanTabs({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex flex-1 gap-1.5 overflow-x-auto pb-1">
+      <div className="scrollbar-hide flex flex-1 gap-1.5 overflow-x-auto pb-1">
         {plans.map((p, idx) =>
           editingId === p.id ? (
             <input
@@ -198,14 +164,11 @@ export function PlanTabs({
               onPointerUp={() => handlePointerUp(p.id)}
               onPointerCancel={handlePointerCancel}
               onDoubleClick={() => startRename(p.id, p.name)}
-              title="長押しで並び替え／ダブルクリックで名前変更"
-              style={{ touchAction: dragId === p.id ? 'none' : 'pan-x' }}
-              className={`flex shrink-0 cursor-grab select-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition active:cursor-grabbing ${
+              title="タップで選択／長押しで並び替え"
+              className={`flex shrink-0 select-none items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
                 p.id === activeId
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
                   : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700'
-              } ${dragId === p.id ? 'opacity-40' : ''} ${
-                overId === p.id ? 'ring-2 ring-indigo-400' : ''
               }`}
             >
               <span
@@ -256,6 +219,19 @@ export function PlanTabs({
         {plans.length > 1 && (
           <button
             type="button"
+            onClick={() => setReorderOpen(true)}
+            className={iconBtn}
+            title="並び替え"
+            aria-label="プランを並び替え"
+          >
+            <TabIcon
+              d={['M7 4v16', 'M4 7l3-3 3 3', 'M17 20V4', 'M14 17l3 3 3-3']}
+            />
+          </button>
+        )}
+        {plans.length > 1 && (
+          <button
+            type="button"
             onClick={() => {
               const target = plans.find((p) => p.id === activeId);
               if (
@@ -281,6 +257,65 @@ export function PlanTabs({
           </button>
         )}
       </div>
+      {reorderOpen && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+          <button
+            type="button"
+            aria-label="閉じる"
+            className="absolute inset-0 cursor-default bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setReorderOpen(false)}
+          />
+          <div className="relative z-10 max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden" />
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                プランの並び替え
+              </p>
+              <button
+                type="button"
+                onClick={() => setReorderOpen(false)}
+                className="text-sm font-medium text-indigo-600 dark:text-indigo-400"
+              >
+                完了
+              </button>
+            </div>
+            <ul className="space-y-1.5">
+              {plans.map((p, idx) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-800/60"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: PLAN_COLORS[idx % PLAN_COLORS.length] }}
+                  />
+                  <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                    {p.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => movePlan(p.id, -1)}
+                    disabled={idx === 0}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-white disabled:opacity-30 dark:border-slate-700 dark:text-slate-400"
+                    aria-label="上へ"
+                  >
+                    <TabIcon d={['M18 15l-6-6-6 6']} className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => movePlan(p.id, 1)}
+                    disabled={idx === plans.length - 1}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-white disabled:opacity-30 dark:border-slate-700 dark:text-slate-400"
+                    aria-label="下へ"
+                  >
+                    <TabIcon d={['M6 9l6 6 6-6']} className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
