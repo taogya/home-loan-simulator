@@ -57,6 +57,8 @@ export interface PlanResult {
   payoffYears: number;
   /** 返済負担率（年間返済額 / 年収, %） */
   repaymentBurdenPct: number;
+  /** ライフプラン中の貯金残高の最大（円） */
+  maxSavings: number;
   /** 年ごとの推移（year=0 を含む） */
   schedule: PlanYear[];
 }
@@ -332,6 +334,7 @@ export function simulatePlan(form: FormState): PlanResult {
     payoffAge,
     payoffYears,
     repaymentBurdenPct,
+    maxSavings: Math.max(...schedule.map((s) => s.savings), 0),
     schedule,
   };
 }

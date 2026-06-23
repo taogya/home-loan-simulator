@@ -9,7 +9,7 @@ import { ComparePanel } from './components/ComparePanel'
 import { PlanMenu } from './components/PlanMenu'
 import { simulatePlan } from './lib/plan'
 import { loadPlans, savePlans } from './lib/storage'
-import { formatYen } from './lib/format'
+import { formatYen, formatManLabel } from './lib/format'
 import { DEFAULT_FORM } from './types'
 import type { ExpenseItem, FormState, LifeEvent, Plan, PlansState } from './types'
 import { useTheme } from './hooks/useTheme'
@@ -315,19 +315,6 @@ function App() {
         ? 'text-amber-600 dark:text-amber-400'
         : 'text-rose-600 dark:text-rose-400'
 
-  const burdenLabel =
-    result.repaymentBurdenPct < 25
-      ? 'ゆとりあり'
-      : result.repaymentBurdenPct < 35
-        ? '標準的'
-        : '要注意'
-  const burdenBadge =
-    result.repaymentBurdenPct < 25
-      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-      : result.repaymentBurdenPct < 35
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
-        : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-
   return (
     <div className="min-h-screen bg-slate-50 pb-24 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
@@ -507,7 +494,7 @@ function App() {
               {activePlan.name}
             </p>
           )}
-          <div className="flex items-center justify-around gap-1.5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             <div className="flex items-center gap-1.5">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
                 <svg
@@ -540,7 +527,31 @@ function App() {
                 )}
               </div>
             </div>
-            <div className="h-7 w-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5"
+                  aria-hidden="true"
+                >
+                  <path d="M3 3v18h18" />
+                  <path d="M7 13l3-3 3 2 5-6" />
+                </svg>
+              </span>
+              <div className="leading-tight">
+                <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                  負担率
+                </p>
+                <p className={`text-sm font-bold tabular-nums ${burdenColor}`}>
+                  {result.repaymentBurdenPct.toFixed(0)}%
+                </p>
+              </div>
+            </div>
             <div className="flex items-center gap-1.5">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <svg
@@ -567,21 +578,30 @@ function App() {
                 </p>
               </div>
             </div>
-            <div className="h-7 w-px bg-slate-200 dark:bg-slate-800" />
             <div className="flex items-center gap-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3.5 w-3.5"
+                  aria-hidden="true"
+                >
+                  <path d="M4 17l6-6 4 4 6-7" />
+                  <path d="M4 21h16" />
+                </svg>
+              </span>
               <div className="leading-tight">
                 <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  負担率
+                  貯金ピーク
                 </p>
-                <p className={`text-sm font-bold tabular-nums ${burdenColor}`}>
-                  {result.repaymentBurdenPct.toFixed(0)}%
+                <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {formatManLabel(Math.round(result.maxSavings / 10000))}
                 </p>
               </div>
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${burdenBadge}`}
-              >
-                {burdenLabel}
-              </span>
             </div>
           </div>
         </div>
