@@ -147,12 +147,6 @@ export function SavingsChart({ data, theme, events, payoffAge }: SavingsChartPro
               x={m.atAge}
               stroke="#f59e0b"
               strokeDasharray="4 2"
-              label={{
-                value: m.label,
-                position: 'insideTopRight',
-                fontSize: 10,
-                fill: '#f59e0b',
-              }}
             />
           ))}
           <Area

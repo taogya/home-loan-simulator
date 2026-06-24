@@ -157,12 +157,6 @@ export function BalanceChart({ schedule, theme, events, payoffAge, isRent }: Bal
               x={m.atAge}
               stroke="#f59e0b"
               strokeDasharray="4 2"
-              label={{
-                value: m.label,
-                position: 'insideTopRight',
-                fontSize: 10,
-                fill: '#f59e0b',
-              }}
             />
           ))}
           <Area
