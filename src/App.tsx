@@ -7,11 +7,19 @@ import { SavingsChart } from './components/SavingsChart'
 import { PlanTabs } from './components/PlanTabs'
 import { ComparePanel } from './components/ComparePanel'
 import { PlanMenu } from './components/PlanMenu'
-import { simulatePlan } from './lib/plan'
-import { loadPlans, savePlans } from './lib/storage'
+import { PlanWizard } from './components/PlanWizard'
+import { simulatePlan, mergeCommonForm } from './lib/plan'
+import { loadPlans, savePlans, normalizeForm } from './lib/storage'
 import { formatYen, formatManLabel } from './lib/format'
-import { DEFAULT_FORM } from './types'
-import type { ExpenseItem, FormState, LifeEvent, Plan, PlansState } from './types'
+import { DEFAULT_FORM, emptyCommon } from './types'
+import type {
+  ExpenseItem,
+  FormState,
+  IncomeItem,
+  LifeEvent,
+  Plan,
+  PlansState,
+} from './types'
 import { useTheme } from './hooks/useTheme'
 
 const CHART_TABS = [
@@ -88,6 +96,19 @@ function MoonIcon() {
   )
 }
 
+function GitHubIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.56 0-.28-.01-1.02-.02-2-3.34.71-4.04-1.58-4.04-1.58-.55-1.36-1.34-1.73-1.34-1.73-1.09-.73.08-.71.08-.71 1.21.08 1.84 1.22 1.84 1.22 1.07 1.8 2.81 1.28 3.5.98.11-.76.42-1.28.76-1.57-2.67-.3-5.47-1.31-5.47-5.83 0-1.29.47-2.34 1.23-3.17-.12-.3-.54-1.52.12-3.16 0 0 1.01-.32 3.3 1.21.96-.26 1.98-.39 3-.4 1.02 0 2.04.14 3 .4 2.28-1.53 3.29-1.21 3.29-1.21.66 1.64.24 2.86.12 3.16.77.83 1.23 1.88 1.23 3.17 0 4.53-2.81 5.52-5.49 5.81.43.36.81 1.09.81 2.2 0 1.59-.01 2.87-.01 3.26 0 .31.21.68.83.56C20.57 21.88 24 17.48 24 12.29 24 5.78 18.63.5 12 .5z" />
+    </svg>
+  )
+}
+
 function LockIcon() {
   return (
     <svg
@@ -106,115 +127,324 @@ function LockIcon() {
   )
 }
 
+/** アクティブプランの form だけを書き換えた新しい state を返す。 */
+function patchActivePlanForm(
+  prev: PlansState,
+  fn: (form: FormState) => FormState,
+): PlansState {
+  return {
+    ...prev,
+    plans: prev.plans.map((p) =>
+      p.id === prev.activeId ? { ...p, form: fn(p.form) } : p,
+    ),
+  }
+}
+
+/** 項目のIDを振り直した form の複製を返す（プラン間のID衝突を防ぐ）。 */
+function cloneFormWithFreshIds(form: FormState): FormState {
+  return {
+    ...form,
+    incomes: form.incomes.map((i) => ({ ...i, id: crypto.randomUUID() })),
+    expenses: form.expenses.map((e) => ({ ...e, id: crypto.randomUUID() })),
+    events: form.events.map((e) => ({ ...e, id: crypto.randomUUID() })),
+  }
+}
+
+function WelcomeHero({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col items-center px-4 py-16 text-center">
+      <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-8 w-8"
+          aria-hidden="true"
+        >
+          <path d="M3 10.5 12 3l9 7.5" />
+          <path d="M5 9.5V21h14V9.5" />
+          <path d="M9 21v-6h6v6" />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+        住宅ローン後の暮らしを、シミュレーション
+      </h2>
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        完済年齢・毎月の返済・家計のキャッシュフロー・貯金の推移をまとめて確認。代表的な項目を入力するだけで、教育費・修繕費・車の買い替えなども自動で用意します。
+      </p>
+      <button
+        type="button"
+        onClick={onStart}
+        className="mt-7 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-700"
+      >
+        シミュレーションを始める
+      </button>
+      <p className="mt-4 inline-flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+        <LockIcon />
+        入力内容はこの端末にだけ保存されます
+      </p>
+    </div>
+  )
+}
+
 function App() {
   const { theme, toggle } = useTheme()
   const [plansState, setPlansState] = useState<PlansState>(loadPlans)
   const [chartTab, setChartTab] = useState<ChartTabId>('balance')
   const [viewMode, setViewMode] = useState<'edit' | 'compare'>('edit')
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   useEffect(() => {
     savePlans(plansState)
   }, [plansState])
 
-  const { plans, activeId } = plansState
+  const { plans, activeId, common } = plansState
   const activePlan = plans.find((p) => p.id === activeId) ?? plans[0]
-  const form = activePlan.form
+  const form = activePlan?.form ?? DEFAULT_FORM
 
   const update = (patch: Partial<FormState>) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId ? { ...p, form: { ...p.form, ...patch } } : p,
-      ),
-    }))
+    setPlansState((prev) =>
+      patchActivePlanForm(prev, (f) => ({ ...f, ...patch })),
+    )
 
+  // ライフイベント（共通プールにあれば共通を、なければアクティブプランを更新）
   const addEvent = (event: LifeEvent) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? { ...p, form: { ...p.form, events: [...p.form.events, event] } }
-          : p,
-      ),
-    }))
-
+    setPlansState((prev) =>
+      patchActivePlanForm(prev, (f) => ({ ...f, events: [...f.events, event] })),
+    )
   const removeEvent = (id: string) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? {
-              ...p,
-              form: {
-                ...p.form,
-                events: p.form.events.filter((e) => e.id !== id),
-              },
-            }
-          : p,
-      ),
-    }))
-
+    setPlansState((prev) =>
+      prev.common.events.some((e) => e.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              events: prev.common.events.filter((e) => e.id !== id),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            events: f.events.filter((e) => e.id !== id),
+          })),
+    )
   const updateEvent = (id: string, patch: Partial<LifeEvent>) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? {
-              ...p,
-              form: {
-                ...p.form,
-                events: p.form.events.map((e) =>
-                  e.id === id ? { ...e, ...patch } : e,
-                ),
-              },
-            }
-          : p,
-      ),
-    }))
+    setPlansState((prev) =>
+      prev.common.events.some((e) => e.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              events: prev.common.events.map((e) =>
+                e.id === id ? { ...e, ...patch } : e,
+              ),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            events: f.events.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+          })),
+    )
+  const toggleCommonEvent = (id: string) =>
+    setPlansState((prev) => {
+      const c = prev.common.events.find((e) => e.id === id)
+      if (c) {
+        return {
+          ...prev,
+          common: {
+            ...prev.common,
+            events: prev.common.events.filter((e) => e.id !== id),
+          },
+          plans: prev.plans.map((p) => ({
+            ...p,
+            form: {
+              ...p.form,
+              events: [...p.form.events, { ...c, id: crypto.randomUUID() }],
+            },
+          })),
+        }
+      }
+      const item = prev.plans
+        .find((p) => p.id === prev.activeId)
+        ?.form.events.find((e) => e.id === id)
+      if (!item) return prev
+      return {
+        ...prev,
+        common: { ...prev.common, events: [...prev.common.events, item] },
+        plans: prev.plans.map((p) =>
+          p.id === prev.activeId
+            ? {
+                ...p,
+                form: {
+                  ...p.form,
+                  events: p.form.events.filter((e) => e.id !== id),
+                },
+              }
+            : p,
+        ),
+      }
+    })
 
+  // 毎月の支出
   const addExpense = (item: ExpenseItem) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? { ...p, form: { ...p.form, expenses: [...p.form.expenses, item] } }
-          : p,
-      ),
-    }))
-
+    setPlansState((prev) =>
+      patchActivePlanForm(prev, (f) => ({
+        ...f,
+        expenses: [...f.expenses, item],
+      })),
+    )
   const removeExpense = (id: string) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? {
-              ...p,
-              form: {
-                ...p.form,
-                expenses: p.form.expenses.filter((e) => e.id !== id),
-              },
-            }
-          : p,
-      ),
-    }))
-
+    setPlansState((prev) =>
+      prev.common.expenses.some((e) => e.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              expenses: prev.common.expenses.filter((e) => e.id !== id),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            expenses: f.expenses.filter((e) => e.id !== id),
+          })),
+    )
   const updateExpense = (id: string, patch: Partial<ExpenseItem>) =>
-    setPlansState((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) =>
-        p.id === prev.activeId
-          ? {
-              ...p,
-              form: {
-                ...p.form,
-                expenses: p.form.expenses.map((e) =>
-                  e.id === id ? { ...e, ...patch } : e,
-                ),
-              },
-            }
-          : p,
-      ),
-    }))
+    setPlansState((prev) =>
+      prev.common.expenses.some((e) => e.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              expenses: prev.common.expenses.map((e) =>
+                e.id === id ? { ...e, ...patch } : e,
+              ),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            expenses: f.expenses.map((e) =>
+              e.id === id ? { ...e, ...patch } : e,
+            ),
+          })),
+    )
+  const toggleCommonExpense = (id: string) =>
+    setPlansState((prev) => {
+      const c = prev.common.expenses.find((e) => e.id === id)
+      if (c) {
+        return {
+          ...prev,
+          common: {
+            ...prev.common,
+            expenses: prev.common.expenses.filter((e) => e.id !== id),
+          },
+          plans: prev.plans.map((p) => ({
+            ...p,
+            form: {
+              ...p.form,
+              expenses: [...p.form.expenses, { ...c, id: crypto.randomUUID() }],
+            },
+          })),
+        }
+      }
+      const item = prev.plans
+        .find((p) => p.id === prev.activeId)
+        ?.form.expenses.find((e) => e.id === id)
+      if (!item) return prev
+      return {
+        ...prev,
+        common: { ...prev.common, expenses: [...prev.common.expenses, item] },
+        plans: prev.plans.map((p) =>
+          p.id === prev.activeId
+            ? {
+                ...p,
+                form: {
+                  ...p.form,
+                  expenses: p.form.expenses.filter((e) => e.id !== id),
+                },
+              }
+            : p,
+        ),
+      }
+    })
+
+  // 収入
+  const addIncome = (item: IncomeItem) =>
+    setPlansState((prev) =>
+      patchActivePlanForm(prev, (f) => ({ ...f, incomes: [...f.incomes, item] })),
+    )
+  const removeIncome = (id: string) =>
+    setPlansState((prev) =>
+      prev.common.incomes.some((i) => i.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              incomes: prev.common.incomes.filter((i) => i.id !== id),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            incomes: f.incomes.filter((i) => i.id !== id),
+          })),
+    )
+  const updateIncome = (id: string, patch: Partial<IncomeItem>) =>
+    setPlansState((prev) =>
+      prev.common.incomes.some((i) => i.id === id)
+        ? {
+            ...prev,
+            common: {
+              ...prev.common,
+              incomes: prev.common.incomes.map((i) =>
+                i.id === id ? { ...i, ...patch } : i,
+              ),
+            },
+          }
+        : patchActivePlanForm(prev, (f) => ({
+            ...f,
+            incomes: f.incomes.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+          })),
+    )
+  const toggleCommonIncome = (id: string) =>
+    setPlansState((prev) => {
+      const c = prev.common.incomes.find((i) => i.id === id)
+      if (c) {
+        return {
+          ...prev,
+          common: {
+            ...prev.common,
+            incomes: prev.common.incomes.filter((i) => i.id !== id),
+          },
+          plans: prev.plans.map((p) => ({
+            ...p,
+            form: {
+              ...p.form,
+              incomes: [...p.form.incomes, { ...c, id: crypto.randomUUID() }],
+            },
+          })),
+        }
+      }
+      const item = prev.plans
+        .find((p) => p.id === prev.activeId)
+        ?.form.incomes.find((i) => i.id === id)
+      if (!item) return prev
+      return {
+        ...prev,
+        common: { ...prev.common, incomes: [...prev.common.incomes, item] },
+        plans: prev.plans.map((p) =>
+          p.id === prev.activeId
+            ? {
+                ...p,
+                form: {
+                  ...p.form,
+                  incomes: p.form.incomes.filter((i) => i.id !== id),
+                },
+              }
+            : p,
+        ),
+      }
+    })
 
   const selectPlan = (id: string) =>
     setPlansState((prev) => ({ ...prev, activeId: id }))
@@ -225,15 +455,34 @@ function App() {
     if (next >= 0 && next < plans.length) selectPlan(plans[next].id)
   }
 
-  const addPlan = () =>
+  const makePlanName = (count: number) =>
+    `プラン${String.fromCharCode(65 + count)}`
+
+  const createPlanFromWizard = (form: FormState) => {
     setPlansState((prev) => {
       const plan: Plan = {
         id: crypto.randomUUID(),
-        name: `プラン${String.fromCharCode(65 + prev.plans.length)}`,
-        form: DEFAULT_FORM,
+        name: makePlanName(prev.plans.length),
+        form,
       }
       return { ...prev, plans: [...prev.plans, plan], activeId: plan.id }
     })
+    setViewMode('edit')
+    setWizardOpen(false)
+  }
+
+  const createBlankPlan = () => {
+    setPlansState((prev) => {
+      const plan: Plan = {
+        id: crypto.randomUUID(),
+        name: makePlanName(prev.plans.length),
+        form: cloneFormWithFreshIds(DEFAULT_FORM),
+      }
+      return { ...prev, plans: [...prev.plans, plan], activeId: plan.id }
+    })
+    setViewMode('edit')
+    setWizardOpen(false)
+  }
 
   const duplicatePlan = () =>
     setPlansState((prev) => {
@@ -241,16 +490,15 @@ function App() {
       const plan: Plan = {
         id: crypto.randomUUID(),
         name: `${src.name}のコピー`,
-        form: { ...src.form, events: [...src.form.events] },
+        form: cloneFormWithFreshIds(src.form),
       }
       return { ...prev, plans: [...prev.plans, plan], activeId: plan.id }
     })
 
   const removePlan = () =>
     setPlansState((prev) => {
-      if (prev.plans.length <= 1) return prev
       const plans = prev.plans.filter((p) => p.id !== prev.activeId)
-      return { ...prev, plans, activeId: plans[0].id }
+      return { ...prev, plans, activeId: plans[0]?.id ?? '' }
     })
 
   const renamePlan = (id: string, name: string) =>
@@ -291,9 +539,10 @@ function App() {
         if (parsed.plans && parsed.plans.length > 0) {
           setPlansState({
             version: 1,
+            common: { ...emptyCommon(), ...(parsed.common ?? {}) },
             plans: parsed.plans.map((p) => ({
               ...p,
-              form: { ...DEFAULT_FORM, ...p.form },
+              form: normalizeForm(p.form),
             })),
             activeId: parsed.activeId ?? parsed.plans[0].id,
           })
@@ -306,7 +555,20 @@ function App() {
     reader.readAsText(file)
   }
 
-  const result = useMemo(() => simulatePlan(form), [form])
+  const result = useMemo(
+    () => simulatePlan(mergeCommonForm(form, common)),
+    [form, common],
+  )
+
+  // 共通＋専用を合成して入力欄に渡す（共通項目は📌で識別）
+  const commonIds = new Set<string>([
+    ...common.incomes.map((i) => i.id),
+    ...common.expenses.map((e) => e.id),
+    ...common.events.map((e) => e.id),
+  ])
+  const mergedIncomes = [...common.incomes, ...form.incomes]
+  const mergedExpenses = [...common.expenses, ...form.expenses]
+  const mergedEvents = [...common.events, ...form.events]
 
   const burdenColor =
     result.repaymentBurdenPct < 25
@@ -328,28 +590,40 @@ function App() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-              {(
-                [
-                  ['edit', '編集'],
-                  ['compare', '比較'],
-                ] as const
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setViewMode(mode)}
-                  className={`rounded-md px-3 py-1 text-sm font-medium transition ${
-                    viewMode === mode
-                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
-                      : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {plans.length > 0 && (
+              <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                {(
+                  [
+                    ['edit', '編集'],
+                    ['compare', '比較'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`rounded-md px-3 py-1 text-sm font-medium transition ${
+                      viewMode === mode
+                        ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <PlanMenu onExport={exportJson} onImport={importJson} />
+            <a
+              href="https://github.com/taogya/home-loan-simulator"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              aria-label="GitHub リポジトリを開く"
+              title="GitHub で見る"
+            >
+              <GitHubIcon />
+            </a>
             <button
               type="button"
               onClick={toggle}
@@ -367,14 +641,23 @@ function App() {
           <LockIcon />
           入力内容はこの端末の中だけに保存され、外部には送信されません
         </div>
+        {plans.length > 0 && (
+          <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+            📌 が付いた項目は全プラン共通です。各項目の 📌 をタップで「共通／このプラン専用」を切り替えられます。
+          </p>
+        )}
       </div>
 
+      {plans.length === 0 ? (
+        <WelcomeHero onStart={() => setWizardOpen(true)} />
+      ) : (
+        <>
       <div className="mx-auto max-w-6xl px-4 pt-3">
         <PlanTabs
           plans={plans}
           activeId={activeId}
           onSelect={selectPlan}
-          onAdd={addPlan}
+          onAdd={() => setWizardOpen(true)}
           onDuplicate={duplicatePlan}
           onRemove={removePlan}
           onRename={renamePlan}
@@ -384,21 +667,29 @@ function App() {
 
       <main className="mx-auto max-w-6xl px-4 py-6">
         {viewMode === 'compare' ? (
-          <ComparePanel plans={plans} theme={theme} />
+          <ComparePanel plans={plans} common={common} theme={theme} />
         ) : (
           <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <InputPanel
             value={form}
             onChange={update}
-            events={form.events}
+            events={mergedEvents}
             onAddEvent={addEvent}
             onRemoveEvent={removeEvent}
             onUpdateEvent={updateEvent}
-            expenses={form.expenses}
+            onToggleCommonEvent={toggleCommonEvent}
+            expenses={mergedExpenses}
             onAddExpense={addExpense}
             onRemoveExpense={removeExpense}
             onUpdateExpense={updateExpense}
+            onToggleCommonExpense={toggleCommonExpense}
+            incomes={mergedIncomes}
+            onAddIncome={addIncome}
+            onRemoveIncome={removeIncome}
+            onUpdateIncome={updateIncome}
+            onToggleCommonIncome={toggleCommonIncome}
+            commonIds={commonIds}
           />
         </div>
         <div className="space-y-6 lg:col-span-2">
@@ -425,7 +716,7 @@ function App() {
               <BalanceChart
                 schedule={result.schedule}
                 theme={theme}
-                events={form.events}
+                events={mergedEvents}
                 payoffAge={result.payoffAge}
                 isRent={result.housingType === 'rent'}
               />
@@ -441,7 +732,7 @@ function App() {
               <SavingsChart
                 data={result.schedule}
                 theme={theme}
-                events={form.events}
+                events={mergedEvents}
                 payoffAge={result.payoffAge}
               />
             )}
@@ -475,7 +766,7 @@ function App() {
                 </svg>
               </button>
               <p className="truncate text-center text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                {activePlan.name}
+                {activePlan?.name}
               </p>
               <button
                 type="button"
@@ -491,7 +782,7 @@ function App() {
             </div>
           ) : (
             <p className="mb-0.5 truncate text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
-              {activePlan.name}
+              {activePlan?.name}
             </p>
           )}
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
@@ -606,6 +897,16 @@ function App() {
           </div>
         </div>
       </div>
+        </>
+      )}
+
+      {wizardOpen && (
+        <PlanWizard
+          onCreate={createPlanFromWizard}
+          onClose={() => setWizardOpen(false)}
+          onCreateBlank={createBlankPlan}
+        />
+      )}
     </div>
   )
 }

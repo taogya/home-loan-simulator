@@ -229,7 +229,7 @@ export function PlanTabs({
             />
           </button>
         )}
-        {plans.length > 1 && (
+        {plans.length >= 1 && (
           <button
             type="button"
             onClick={() => {

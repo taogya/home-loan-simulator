@@ -2,8 +2,21 @@
 // 繰上げはローン残高と貯金が相互に影響するため、年次の一つのループで処理する。
 // すべての金額は「円」単位で扱う。
 
-import type { FormState, ExpenseItem } from '../types';
+import type { FormState, ExpenseItem, IncomeItem, CommonSettings } from '../types';
 import { eventOccursAt } from './events';
+
+/** 共通設定をプランの form に合成した form を返す（共通→専用の順で結合）。 */
+export function mergeCommonForm(
+  form: FormState,
+  common: CommonSettings,
+): FormState {
+  return {
+    ...form,
+    incomes: [...common.incomes, ...form.incomes],
+    expenses: [...common.expenses, ...form.expenses],
+    events: [...common.events, ...form.events],
+  };
+}
 
 export interface PlanYear {
   /** 経過年（0 = 借入時点） */
@@ -142,6 +155,53 @@ function expenseActiveAt(e: ExpenseItem, elapsedYears: number): boolean {
   return true;
 }
 
+/** その収入が指定年齢で受け取れるか（単発=startAge のみ。endAge は含む） */
+function incomeActiveAt(inc: IncomeItem, age: number): boolean {
+  if (age < inc.startAge) return false;
+  if (inc.oneTime) return age === inc.startAge;
+  if (inc.endAge != null && inc.endAge > 0 && age > inc.endAge) return false;
+  return true;
+}
+
+/** その収入の指定年齢での年額（円・昇給とボーナスを反映） */
+function incomeAnnualYen(inc: IncomeItem, age: number): number {
+  const isSalary = inc.kind === 'salary';
+  const months =
+    inc.basis === 'monthly' ? 12 + (isSalary ? inc.bonusMonths ?? 0 : 0) : 1;
+  let annual = inc.amountMan * 10000 * months;
+  if (isSalary && inc.raiseRatePct) {
+    const stop = inc.raiseStopAge ?? age;
+    const grown = Math.max(0, Math.min(age - inc.startAge, stop - inc.startAge));
+    annual *= Math.pow(1 + inc.raiseRatePct / 100, grown);
+  }
+  return annual;
+}
+
+/**
+ * 指定年齢の年間手取り収入（円）。
+ * 本人・配偶者の額面給与（isGross）はそれぞれ合算して estimateTakeHome で手取り換算し、
+ * 手取り項目（年金・退職金・その他）はそのまま加算する（個人単位の概算）。
+ * includeOneTime=false で単発（退職金など）を除外する。
+ */
+function annualIncomeAt(
+  incomes: IncomeItem[] | undefined,
+  age: number,
+  includeOneTime = true,
+): number {
+  let grossSelf = 0;
+  let grossSpouse = 0;
+  let net = 0;
+  for (const inc of incomes ?? []) {
+    if (!incomeActiveAt(inc, age)) continue;
+    if (inc.oneTime && !includeOneTime) continue;
+    const annual = incomeAnnualYen(inc, age);
+    if (inc.isGross && inc.owner === 'self') grossSelf += annual;
+    else if (inc.isGross && inc.owner === 'spouse') grossSpouse += annual;
+    else net += annual;
+  }
+  return estimateTakeHome(grossSelf) + estimateTakeHome(grossSpouse) + net;
+}
+
 export function simulatePlan(form: FormState): PlanResult {
   const isRent = form.housingType === 'rent';
   const principal = isRent ? 0 : form.loanAmountMan * 10000;
@@ -214,30 +274,10 @@ export function simulatePlan(form: FormState): PlanResult {
     }
     totalInterest += yearInterest;
 
-    // 家計：本人収入は定年までは給与（昇給・ボーナス込み・手取り換算）、
-    // 年金開始以降は年金（手取り月額×12）、その間（定年〜受給開始）は無収入。
-    let personalIncome = 0;
-    if (age < form.retireAge) {
-      const grownYears = Math.max(
-        0,
-        Math.min(y - 1, form.raiseStopAge - startAge),
-      );
-      const grossAnnual =
-        form.monthlySalaryMan *
-        10000 *
-        (12 + form.bonusMonths) *
-        Math.pow(1 + form.raiseRatePct / 100, grownYears);
-      personalIncome = estimateTakeHome(grossAnnual);
-    } else if (age >= form.pensionStartAge) {
-      personalIncome = form.pensionMonthlyMan * 10000 * 12;
-    }
-    const retirementBonus =
-      age === form.retireAge ? form.retirementBonusMan * 10000 : 0;
-    const income =
-      personalIncome +
-      retirementBonus +
-      form.spouseIncomeMan * 10000 +
-      form.sideIncomeMan * 10000;
+    // 家計：収入は incomes から年齢ごとに算出。
+    // 本人・配偶者の額面給与はそれぞれ合算して手取り換算、
+    // 年金・退職金・その他（手取り）はそのまま加算する。
+    const income = annualIncomeAt(form.incomes, age);
     const rentAnnual = isRent ? form.rentMan * 12 * 10000 : 0;
     const renewalFee =
       isRent &&
@@ -277,7 +317,6 @@ export function simulatePlan(form: FormState): PlanResult {
         if (remaining > 0) {
           const fromB = Math.min(remaining, balB);
           balB -= fromB;
-          remaining -= fromB;
         }
         if (balM < 0.5) balM = 0;
         if (balB < 0.5) balB = 0;
@@ -313,11 +352,8 @@ export function simulatePlan(form: FormState): PlanResult {
     : monthly * 12 + bonus * 2;
   const totalPayment = principal + totalInterest;
   const payoffAge = isRent ? 0 : startAge + payoffYears;
-  const grossAnnualNow = form.monthlySalaryMan * 10000 * (12 + form.bonusMonths);
-  const netAnnualNow =
-    estimateTakeHome(grossAnnualNow) +
-    form.spouseIncomeMan * 10000 +
-    form.sideIncomeMan * 10000;
+  // 返済負担率の分母：開始時点（現在）の手取り年収（単発の退職金などは除外）
+  const netAnnualNow = annualIncomeAt(form.incomes, startAge, false);
   const repaymentBurdenPct =
     netAnnualNow > 0 ? (annualRepayment / netAnnualNow) * 100 : 0;
 

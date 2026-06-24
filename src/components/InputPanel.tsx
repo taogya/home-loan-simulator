@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { NumberSlider } from './NumberSlider';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatManLabel } from '../lib/format';
-import type { FormState, LifeEvent, ExpenseItem } from '../types';
+import type {
+  FormState,
+  LifeEvent,
+  ExpenseItem,
+  IncomeItem,
+  IncomeOwner,
+  IncomeKind,
+} from '../types';
 
 const EXPENSE_PRESETS: { label: string; amountMan: number }[] = [
   { label: '生活費', amountMan: 20 },
@@ -16,7 +23,11 @@ const EXPENSE_PRESETS: { label: string; amountMan: number }[] = [
   { label: '保険', amountMan: 2 },
   { label: '固定資産税', amountMan: 1 },
   { label: '修繕・管理費', amountMan: 1.5 },
-  { label: '教育費', amountMan: 3 },
+  { label: '教育費（幼稚園）', amountMan: 1.5 },
+  { label: '教育費（小学校）', amountMan: 3 },
+  { label: '教育費（中学校）', amountMan: 5 },
+  { label: '教育費（高校）', amountMan: 4.5 },
+  { label: '教育費（大学）', amountMan: 4.5 },
   { label: '奨学金返済', amountMan: 2 },
   { label: '医療費', amountMan: 1 },
   { label: '被服費', amountMan: 1 },
@@ -33,16 +44,74 @@ const LIFE_EVENT_PRESETS: {
   untilAge?: number;
 }[] = [
   { label: '車の買い替え', amountMan: 150, yearsLater: 10, intervalYears: 10, untilAge: 75 },
-  { label: 'リフォーム', amountMan: 300, yearsLater: 20, intervalYears: 20, untilAge: 100 },
+  { label: 'リフォーム', amountMan: 300, yearsLater: 30, intervalYears: 30, untilAge: 100 },
   { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 15, intervalYears: 15, untilAge: 100 },
   { label: '給湯器の交換', amountMan: 50, yearsLater: 15, intervalYears: 15, untilAge: 100 },
   { label: 'エアコン買い替え', amountMan: 15, yearsLater: 10, intervalYears: 10, untilAge: 100 },
-  { label: '出産', amountMan: 50, yearsLater: 2 },
-  { label: '入学（大学）', amountMan: 100, yearsLater: 18 },
+  { label: '出産', amountMan: 20, yearsLater: 2 },
+  { label: '大学入学金', amountMan: 30, yearsLater: 18 },
   { label: '結婚式', amountMan: 300, yearsLater: 3 },
   { label: '家族旅行', amountMan: 30, yearsLater: 5 },
   { label: '家電の買い替え', amountMan: 50, yearsLater: 10, intervalYears: 10, untilAge: 100 },
 ];
+
+const INCOME_GROUPS: { owner: IncomeOwner; label: string; short: string }[] = [
+  { owner: 'self', label: '本人の収入', short: '本人' },
+  { owner: 'spouse', label: '配偶者の収入', short: '配偶者' },
+  { owner: 'other', label: 'その他の収入', short: 'その他' },
+];
+
+const INCOME_KINDS: { kind: IncomeKind; label: string }[] = [
+  { kind: 'salary', label: '給与' },
+  { kind: 'pension', label: '年金' },
+  { kind: 'retirement', label: '退職金' },
+  { kind: 'other', label: 'その他' },
+];
+
+interface IncomePreset {
+  owner: IncomeOwner;
+  kind: IncomeKind;
+  label: string;
+  basis: 'monthly' | 'annual';
+  isGross: boolean;
+  amountMan: number;
+  /** 開始＝現在の年齢にする */
+  fromNow?: boolean;
+  /** 絶対年齢（fromNow でないとき） */
+  startAge?: number;
+  endAge?: number;
+  oneTime?: boolean;
+  bonusMonths?: number;
+  raiseRatePct?: number;
+  raiseStopAge?: number;
+}
+
+const INCOME_PRESETS: IncomePreset[] = [
+  // 本人
+  { owner: 'self', kind: 'salary', label: '本人給与', basis: 'monthly', isGross: true, amountMan: 30, fromNow: true, endAge: 64, bonusMonths: 4, raiseRatePct: 1.5, raiseStopAge: 55 },
+  { owner: 'self', kind: 'pension', label: '年金', basis: 'monthly', isGross: false, amountMan: 15, startAge: 65 },
+  { owner: 'self', kind: 'retirement', label: '退職金', basis: 'annual', isGross: false, amountMan: 1000, startAge: 65, oneTime: true },
+  // 配偶者
+  { owner: 'spouse', kind: 'salary', label: '配偶者給与', basis: 'annual', isGross: true, amountMan: 300, fromNow: true, endAge: 64 },
+  { owner: 'spouse', kind: 'pension', label: '配偶者の年金', basis: 'monthly', isGross: false, amountMan: 6, startAge: 65 },
+  { owner: 'spouse', kind: 'retirement', label: '配偶者の退職金', basis: 'annual', isGross: false, amountMan: 500, startAge: 65, oneTime: true },
+  // その他
+  { owner: 'other', kind: 'other', label: '副業', basis: 'annual', isGross: false, amountMan: 50, fromNow: true },
+  { owner: 'other', kind: 'other', label: '家賃収入', basis: 'annual', isGross: false, amountMan: 60, fromNow: true },
+  { owner: 'other', kind: 'other', label: '投資・配当', basis: 'annual', isGross: false, amountMan: 30, fromNow: true },
+];
+
+function incomeAmountLabel(inc: IncomeItem): string {
+  const amt = formatManLabel(inc.amountMan);
+  if (inc.oneTime) return amt;
+  return inc.basis === 'monthly' ? `月${amt}` : `年${amt}`;
+}
+
+function incomeAgeLabel(inc: IncomeItem): string {
+  if (inc.oneTime) return `${inc.startAge}歳`;
+  if (inc.endAge != null && inc.endAge > 0) return `${inc.startAge}〜${inc.endAge}歳`;
+  return `${inc.startAge}歳〜`;
+}
 
 interface InputPanelProps {
   value: FormState;
@@ -55,6 +124,14 @@ interface InputPanelProps {
   onAddExpense: (item: ExpenseItem) => void;
   onRemoveExpense: (id: string) => void;
   onUpdateExpense: (id: string, patch: Partial<ExpenseItem>) => void;
+  incomes: IncomeItem[];
+  onAddIncome: (item: IncomeItem) => void;
+  onRemoveIncome: (id: string) => void;
+  onUpdateIncome: (id: string, patch: Partial<IncomeItem>) => void;
+  onToggleCommonIncome: (id: string) => void;
+  onToggleCommonExpense: (id: string) => void;
+  onToggleCommonEvent: (id: string) => void;
+  commonIds: Set<string>;
 }
 
 function PencilIcon() {
@@ -72,6 +149,53 @@ function PencilIcon() {
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
     </svg>
+  );
+}
+
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <line x1="12" x2="12" y1="17" y2="22" />
+      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+    </svg>
+  );
+}
+
+function PinButton({
+  active,
+  onClick,
+}: {
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={
+        active
+          ? 'プラン共通（タップでこのプラン専用に）'
+          : 'このプラン専用（タップで全プラン共通に）'
+      }
+      aria-label={active ? 'プラン共通を解除' : 'プラン共通にする'}
+      aria-pressed={active}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition ${
+        active
+          ? 'text-indigo-600 dark:text-indigo-400'
+          : 'text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400'
+      }`}
+    >
+      <PinIcon filled={active} />
+    </button>
   );
 }
 
@@ -103,6 +227,14 @@ export function InputPanel({
   onAddExpense,
   onRemoveExpense,
   onUpdateExpense,
+  incomes,
+  onAddIncome,
+  onRemoveIncome,
+  onUpdateIncome,
+  onToggleCommonIncome,
+  onToggleCommonExpense,
+  onToggleCommonEvent,
+  commonIds,
 }: InputPanelProps) {
   const [open, setOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -210,6 +342,134 @@ export function InputPanel({
     }
     setEditingExpenseId(null);
   };
+
+  // 収入シート（追加式）
+  const [incSheetOpen, setIncSheetOpen] = useState(false);
+  const [incEditingId, setIncEditingId] = useState<string | null>(null);
+  const [incError, setIncError] = useState(false);
+  const [incOwner, setIncOwner] = useState<IncomeOwner>('self');
+  const [incKind, setIncKind] = useState<IncomeKind>('salary');
+  const [incLabel, setIncLabel] = useState('');
+  const [incAmount, setIncAmount] = useState('30');
+  const [incBasis, setIncBasis] = useState<'monthly' | 'annual'>('monthly');
+  const [incGross, setIncGross] = useState(true);
+  const [incStartAge, setIncStartAge] = useState(String(value.age));
+  const [incEndAge, setIncEndAge] = useState('');
+  const [incBonusMonths, setIncBonusMonths] = useState('4');
+  const [incRaiseRate, setIncRaiseRate] = useState('1.5');
+  const [incRaiseStopAge, setIncRaiseStopAge] = useState('55');
+
+  const closeIncSheet = () => {
+    setIncSheetOpen(false);
+    setIncEditingId(null);
+    setIncError(false);
+  };
+
+  const fillIncomeDraft = (src: {
+    owner: IncomeOwner;
+    kind: IncomeKind;
+    label: string;
+    amountMan: number;
+    basis: 'monthly' | 'annual';
+    isGross: boolean;
+    startAge: number;
+    endAge?: number;
+    bonusMonths?: number;
+    raiseRatePct?: number;
+    raiseStopAge?: number;
+  }) => {
+    setIncOwner(src.owner);
+    setIncKind(src.kind);
+    setIncLabel(src.label);
+    setIncAmount(String(src.amountMan));
+    setIncBasis(src.basis);
+    setIncGross(src.isGross);
+    setIncStartAge(String(src.startAge));
+    setIncEndAge(src.endAge != null ? String(src.endAge) : '');
+    setIncBonusMonths(String(src.bonusMonths ?? 4));
+    setIncRaiseRate(String(src.raiseRatePct ?? 1.5));
+    setIncRaiseStopAge(String(src.raiseStopAge ?? 55));
+    setIncError(false);
+  };
+
+  const openIncomePreset = (preset: IncomePreset) => {
+    setIncEditingId(null);
+    fillIncomeDraft({
+      owner: preset.owner,
+      kind: preset.kind,
+      label: preset.label,
+      amountMan: preset.amountMan,
+      basis: preset.basis,
+      isGross: preset.isGross,
+      startAge: preset.fromNow ? value.age : preset.startAge ?? value.age,
+      endAge: preset.endAge,
+      bonusMonths: preset.bonusMonths,
+      raiseRatePct: preset.raiseRatePct,
+      raiseStopAge: preset.raiseStopAge,
+    });
+    setIncSheetOpen(true);
+  };
+
+  const openIncomeCustom = (owner: IncomeOwner) => {
+    setIncEditingId(null);
+    fillIncomeDraft({
+      owner,
+      kind: owner === 'other' ? 'other' : 'salary',
+      label: '',
+      amountMan: owner === 'other' ? 10 : 30,
+      basis: owner === 'other' ? 'annual' : 'monthly',
+      isGross: owner !== 'other',
+      startAge: value.age,
+      endAge: owner === 'other' ? undefined : 64,
+    });
+    setIncSheetOpen(true);
+  };
+
+  const startEditIncome = (inc: IncomeItem) => {
+    setIncEditingId(inc.id);
+    fillIncomeDraft(inc);
+    setIncSheetOpen(true);
+  };
+
+  const handleSubmitIncome = () => {
+    const label = incLabel.trim();
+    if (!label) {
+      setIncError(true);
+      return;
+    }
+    const owner = incOwner;
+    const kind: IncomeKind = owner === 'other' ? 'other' : incKind;
+    const isSalary = kind === 'salary';
+    const oneTime = kind === 'retirement';
+    const startAge = Number(incStartAge) || value.age;
+    const endNum = Number(incEndAge);
+    const endAge =
+      oneTime || incEndAge.trim() === '' || !Number.isFinite(endNum)
+        ? undefined
+        : Math.max(startAge, endNum);
+    const payload: Omit<IncomeItem, 'id'> = {
+      owner,
+      kind,
+      label,
+      startAge,
+      endAge,
+      amountMan: Number(incAmount) || 0,
+      basis: oneTime ? 'annual' : incBasis,
+      isGross: isSalary ? incGross : false,
+      oneTime: oneTime || undefined,
+      bonusMonths:
+        isSalary && incBasis === 'monthly' ? Number(incBonusMonths) || 0 : undefined,
+      raiseRatePct: isSalary ? Number(incRaiseRate) || 0 : undefined,
+      raiseStopAge: isSalary ? Number(incRaiseStopAge) || undefined : undefined,
+    };
+    if (incEditingId) onUpdateIncome(incEditingId, payload);
+    else onAddIncome({ id: crypto.randomUUID(), ...payload });
+    closeIncSheet();
+  };
+
+  const incEffectiveKind: IncomeKind = incOwner === 'other' ? 'other' : incKind;
+  const incIsSalary = incEffectiveKind === 'salary';
+  const incIsRetirement = incEffectiveKind === 'retirement';
 
   return (
     <div className="card p-5">
@@ -335,112 +595,365 @@ export function InputPanel({
       />
           </CollapsibleSection>
 
-      {/* 収入（折りたたみ） */}
+      {/* 収入（追加式・本人/配偶者/その他） */}
       <CollapsibleSection title="収入">
-        <NumberSlider
-          label="月給（額面）"
-          value={value.monthlySalaryMan}
-          min={10}
-          max={200}
-          step={1}
-          onChange={(v) => onChange({ monthlySalaryMan: v })}
-          format={formatManLabel}
-          hint="税引き前の月給。手取りは自動で計算します"
-        />
-        <NumberSlider
-          label="年間ボーナス（月給の何ヶ月分）"
-          value={value.bonusMonths}
-          min={0}
-          max={8}
-          step={0.5}
-          onChange={(v) => onChange({ bonusMonths: v })}
-          format={(v) => `${v}ヶ月`}
-          hint="夏・冬あわせた年間の合計"
-        />
-        <NumberSlider
-          label="昇給率"
-          value={value.raiseRatePct}
-          min={0}
-          max={5}
-          step={0.1}
-          onChange={(v) => onChange({ raiseRatePct: v })}
-          format={(v) => `${v.toFixed(1)}%`}
-          hint="1年で年収が上がる割合（夏冬合算）"
-        />
-        <NumberSlider
-          label="昇給停止年齢"
-          value={value.raiseStopAge}
-          min={40}
-          max={70}
-          step={1}
-          onChange={(v) => onChange({ raiseStopAge: v })}
-          format={(v) => `${v}歳`}
-          hint="この年齢で昇給が止まり、以降の年収は横ばいになります"
-        />
-        <NumberSlider
-          label="配偶者の年収"
-          value={value.spouseIncomeMan}
-          min={0}
-          max={1500}
-          step={10}
-          onChange={(v) => onChange({ spouseIncomeMan: v })}
-          format={formatManLabel}
-          hint="なければ 0 のまま"
-        />
-        <NumberSlider
-          label="副収入"
-          value={value.sideIncomeMan}
-          min={0}
-          max={500}
-          step={10}
-          onChange={(v) => onChange({ sideIncomeMan: v })}
-          format={formatManLabel}
-          hint="副業・家賃収入など（年）"
-        />
-      </CollapsibleSection>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          給与・年金・退職金などを追加。本人・配偶者の給与は「額面」から手取りを自動で概算します（税額は概算）。年齢はすべて本人の年齢が基準です
+        </p>
+        {INCOME_GROUPS.map((group) => {
+          const items = incomes.filter((i) => i.owner === group.owner);
+          const usablePresets = INCOME_PRESETS.filter(
+            (p) =>
+              p.owner === group.owner && !items.some((i) => i.label === p.label),
+          );
+          return (
+            <div key={group.owner} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {group.label}
+                </span>
+                {group.owner === 'other' && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                    手取り・税計算なし
+                  </span>
+                )}
+              </div>
+              {items.length > 0 && (
+                <ul className="space-y-1.5">
+                  {[...items]
+                    .sort((a, b) => a.startAge - b.startAge)
+                    .map((inc) => (
+                      <li
+                        key={inc.id}
+                        className="flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-sm dark:bg-slate-900"
+                      >
+                        <PinButton
+                          active={commonIds.has(inc.id)}
+                          onClick={() => onToggleCommonIncome(inc.id)}
+                        />
+                        <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-200">
+                          <span className="font-medium">{inc.label}</span>
+                          <span className="ml-1.5 text-xs text-slate-400">
+                            {incomeAgeLabel(inc)}
+                          </span>
+                          {inc.owner !== 'other' && inc.isGross && (
+                            <span className="ml-1.5 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                              額面
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="font-medium text-slate-500 dark:text-slate-400">
+                            {incomeAmountLabel(inc)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => startEditIncome(inc)}
+                            className="text-xs text-slate-400 transition hover:text-indigo-500"
+                          >
+                            編集
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRemoveIncome(inc.id)}
+                            className="text-xs text-slate-400 transition hover:text-rose-500"
+                          >
+                            削除
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {usablePresets.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {usablePresets.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => openIncomePreset(preset)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-700"
+                    >
+                      ＋ {preset.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => openIncomeCustom(group.owner)}
+                className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm font-medium text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-700"
+              >
+                ＋ 自由に追加
+              </button>
+            </div>
+          );
+        })}
 
-      {/* 定年・年金（折りたたみ） */}
-      <CollapsibleSection title="定年・年金">
-        <NumberSlider
-          label="定年退職の年齢"
-          value={value.retireAge}
-          min={55}
-          max={75}
-          step={1}
-          onChange={(v) => onChange({ retireAge: v })}
-          format={(v) => `${v}歳`}
-          hint="給与収入が止まる年齢"
-        />
-        <NumberSlider
-          label="退職金"
-          value={value.retirementBonusMan}
-          min={0}
-          max={5000}
-          step={100}
-          onChange={(v) => onChange({ retirementBonusMan: v })}
-          format={formatManLabel}
-          hint="定年時に受け取る一時金（目安1,000〜2,000万円）"
-        />
-        <NumberSlider
-          label="年金（手取り月額）"
-          value={value.pensionMonthlyMan}
-          min={0}
-          max={40}
-          step={1}
-          onChange={(v) => onChange({ pensionMonthlyMan: v })}
-          format={formatManLabel}
-          hint="目安：夫婦で約22万円／単身で約15万円"
-        />
-        <NumberSlider
-          label="年金の受給開始"
-          value={value.pensionStartAge}
-          min={60}
-          max={75}
-          step={1}
-          onChange={(v) => onChange({ pensionStartAge: v })}
-          format={(v) => `${v}歳`}
-          hint="原則65歳。定年より遅いと無収入期間が出ます"
-        />
+        {incSheetOpen && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+            <button
+              type="button"
+              aria-label="閉じる"
+              className="absolute inset-0 cursor-default bg-slate-900/40 backdrop-blur-sm"
+              onClick={closeIncSheet}
+            />
+            <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden" />
+              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {incEditingId ? '収入を編集' : '収入を追加'}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    持ち主
+                  </p>
+                  <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
+                    {INCOME_GROUPS.map((g) => (
+                      <button
+                        key={g.owner}
+                        type="button"
+                        onClick={() => setIncOwner(g.owner)}
+                        className={`flex-1 rounded-lg px-2 py-1 text-xs font-semibold transition ${
+                          incOwner === g.owner
+                            ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                            : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        {g.short}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {incOwner !== 'other' && (
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      種類
+                    </p>
+                    <div className="grid grid-cols-4 gap-1">
+                      {INCOME_KINDS.map((k) => (
+                        <button
+                          key={k.kind}
+                          type="button"
+                          onClick={() => setIncKind(k.kind)}
+                          className={`rounded-lg px-1 py-1 text-xs font-medium transition ${
+                            incKind === k.kind
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {k.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    名前
+                  </p>
+                  <input
+                    type="text"
+                    value={incLabel}
+                    placeholder="例: 本人給与"
+                    onChange={(e) => {
+                      setIncLabel(e.target.value);
+                      if (incError) setIncError(false);
+                    }}
+                    className={`w-full rounded-lg border bg-white px-2 py-1 text-sm dark:bg-slate-950 ${
+                      incError
+                        ? 'border-rose-400 ring-1 ring-rose-300 dark:border-rose-500'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                    aria-label="収入の名前"
+                  />
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    金額
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!incIsRetirement && (
+                      <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/60">
+                        {(
+                          [
+                            ['monthly', '月額'],
+                            ['annual', '年額'],
+                          ] as const
+                        ).map(([b, l]) => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setIncBasis(b)}
+                            className={`rounded-md px-2 py-0.5 text-xs font-medium transition ${
+                              incBasis === b
+                                ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <input
+                      type="number"
+                      value={incAmount}
+                      min={0}
+                      step={1}
+                      onChange={(e) => setIncAmount(e.target.value)}
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      aria-label="金額（万円）"
+                    />
+                    <span className="text-xs text-slate-400">
+                      万円{incIsRetirement ? '（一度だけ）' : ''}
+                    </span>
+                  </div>
+                </div>
+
+                {incIsSalary && (
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      入力する金額
+                    </p>
+                    <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/60">
+                      {(
+                        [
+                          [true, '額面（手取り自動）'],
+                          [false, '手取り'],
+                        ] as const
+                      ).map(([g, l]) => (
+                        <button
+                          key={String(g)}
+                          type="button"
+                          onClick={() => setIncGross(g)}
+                          className={`flex-1 rounded-md px-2 py-1 text-xs font-medium transition ${
+                            incGross === g
+                              ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                              : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    受け取る期間（本人の年齢が基準）
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <input
+                      type="number"
+                      value={incStartAge}
+                      min={0}
+                      max={120}
+                      onChange={(e) => setIncStartAge(e.target.value)}
+                      className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
+                      aria-label="開始年齢"
+                    />
+                    <span className="text-xs text-slate-400">
+                      歳から{incIsRetirement ? 'の年に一度だけ' : ''}
+                    </span>
+                    {!incIsRetirement && (
+                      <>
+                        <input
+                          type="number"
+                          value={incEndAge}
+                          min={0}
+                          max={120}
+                          placeholder="ずっと"
+                          onChange={(e) => setIncEndAge(e.target.value)}
+                          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
+                          aria-label="終了年齢"
+                        />
+                        <span className="text-xs text-slate-400">
+                          {incEndAge.trim() ? '歳まで' : '歳まで（空＝ずっと）'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {incIsSalary && (
+                  <div className="space-y-2 rounded-lg bg-slate-50 p-2.5 dark:bg-slate-800/40">
+                    {incBasis === 'monthly' && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          ボーナス（月給の何ヶ月分／年）
+                        </span>
+                        <input
+                          type="number"
+                          value={incBonusMonths}
+                          min={0}
+                          step={0.5}
+                          onChange={(e) => setIncBonusMonths(e.target.value)}
+                          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          aria-label="ボーナス月数"
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        昇給率（％／年）
+                      </span>
+                      <input
+                        type="number"
+                        value={incRaiseRate}
+                        min={0}
+                        step={0.1}
+                        onChange={(e) => setIncRaiseRate(e.target.value)}
+                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        aria-label="昇給率"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        昇給停止年齢
+                      </span>
+                      <input
+                        type="number"
+                        value={incRaiseStopAge}
+                        min={0}
+                        max={120}
+                        onChange={(e) => setIncRaiseStopAge(e.target.value)}
+                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                        aria-label="昇給停止年齢"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSubmitIncome}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+                  >
+                    {incEditingId ? '更新' : '追加'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeIncSheet}
+                    className="rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    キャンセル
+                  </button>
+                  {incError && (
+                    <p className="text-xs font-medium text-rose-500">
+                      名前を入力してください
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CollapsibleSection>
 
       {/* 毎月の支出（追加式） */}
@@ -458,11 +971,17 @@ export function InputPanel({
           <div className="space-y-3">
             {expenses.map((e) => (
               <div key={e.id} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                    {e.label}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <PinButton
+                      active={commonIds.has(e.id)}
+                      onClick={() => onToggleCommonExpense(e.id)}
+                    />
+                    <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {e.label}
+                    </span>
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     {editingExpenseId === e.id ? (
                       <input
                         type="number"
@@ -698,13 +1217,17 @@ export function InputPanel({
                 return (
                   <li
                     key={e.id}
-                    className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-sm ${
+                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ${
                       editing
                         ? 'bg-indigo-50 ring-1 ring-indigo-300 dark:bg-indigo-950/40 dark:ring-indigo-700'
                         : 'bg-white dark:bg-slate-900'
                     }`}
                   >
-                    <span className="text-slate-700 dark:text-slate-200">
+                    <PinButton
+                      active={commonIds.has(e.id)}
+                      onClick={() => onToggleCommonEvent(e.id)}
+                    />
+                    <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-200">
                       <span className="font-semibold">
                         {yearsLater <= 0 ? '今' : `${yearsLater}年後`}
                       </span>
@@ -771,7 +1294,7 @@ export function InputPanel({
           }}
           className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm font-medium text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-700"
         >
-          ＋ 自由に追加（詳細を設定）
+          ＋ 自由に追加
         </button>
         {evSheetOpen && (
           <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">

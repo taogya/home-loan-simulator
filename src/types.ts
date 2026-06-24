@@ -30,6 +30,41 @@ export interface ExpenseItem {
   durationYears?: number;
 }
 
+/** 収入の持ち主（税は本人・配偶者で個別に計算、その他は手取り直接） */
+export type IncomeOwner = 'self' | 'spouse' | 'other';
+
+/** 収入の種類 */
+export type IncomeKind = 'salary' | 'pension' | 'retirement' | 'other';
+
+export interface IncomeItem {
+  /** 一意なID */
+  id: string;
+  /** 持ち主（本人/配偶者/その他） */
+  owner: IncomeOwner;
+  /** 種類（給与/年金/退職金/その他） */
+  kind: IncomeKind;
+  /** 項目名（例: 本人給与） */
+  label: string;
+  /** 受け取り開始年齢（すべて本人の年齢が基準・歳） */
+  startAge: number;
+  /** 受け取り終了年齢（含む・空=ずっと） */
+  endAge?: number;
+  /** 金額（万円。basis により月額/年額） */
+  amountMan: number;
+  /** 金額の単位（monthly=月額 / annual=年額） */
+  basis: 'monthly' | 'annual';
+  /** true=額面（給与所得→手取りを自動計算） / false=手取り（そのまま加算） */
+  isGross: boolean;
+  /** 年間ボーナス＝月給の何ヶ月分（給与・basis=monthly のとき有効） */
+  bonusMonths?: number;
+  /** 昇給率（%/年・給与のみ） */
+  raiseRatePct?: number;
+  /** 昇給停止年齢（歳・給与のみ） */
+  raiseStopAge?: number;
+  /** 単発（退職金など・startAge の年だけ受け取る） */
+  oneTime?: boolean;
+}
+
 export interface FormState {
   // 住居タイプ
   /** 住居タイプ（own=持ち家・ローン / rent=賃貸） */
@@ -53,29 +88,9 @@ export interface FormState {
   /** 更新間隔（年） */
   renewalIntervalYears: number;
 
-  // 収入
-  /** 月給（額面・税引き前, 万円/月） */
-  monthlySalaryMan: number;
-  /** 年間ボーナス＝月給の何ヶ月分（年間合計） */
-  bonusMonths: number;
-  /** 昇給率（%/年・額面） */
-  raiseRatePct: number;
-  /** 昇給停止年齢（歳） */
-  raiseStopAge: number;
-  /** 配偶者の手取り年収（年・万円） */
-  spouseIncomeMan: number;
-  /** 副収入（手取り・年・万円） */
-  sideIncomeMan: number;
-
-  // 定年・年金
-  /** 定年退職の年齢（歳・以降は給与収入なし） */
-  retireAge: number;
-  /** 年金の受給開始年齢（歳） */
-  pensionStartAge: number;
-  /** 年金の手取り月額（万円） */
-  pensionMonthlyMan: number;
-  /** 退職金（一時金・万円。定年時に受け取る） */
-  retirementBonusMan: number;
+  // 収入（追加式・本人/配偶者/その他）
+  /** 収入項目（給与・年金・退職金・その他） */
+  incomes: IncomeItem[];
 
   // 支出（毎月・万円）
   /** 毎月の支出項目（追加式・定番＋自由ラベル） */
@@ -109,16 +124,43 @@ export const DEFAULT_FORM: FormState = {
   rentMan: 12,
   renewalFeeMan: 12,
   renewalIntervalYears: 2,
-  monthlySalaryMan: 30,
-  bonusMonths: 4,
-  raiseRatePct: 1.5,
-  raiseStopAge: 55,
-  spouseIncomeMan: 0,
-  sideIncomeMan: 0,
-  retireAge: 65,
-  pensionStartAge: 65,
-  pensionMonthlyMan: 15,
-  retirementBonusMan: 1000,
+  incomes: [
+    {
+      id: 'inc-salary',
+      owner: 'self',
+      kind: 'salary',
+      label: '本人給与',
+      startAge: 35,
+      endAge: 64,
+      amountMan: 30,
+      basis: 'monthly',
+      isGross: true,
+      bonusMonths: 4,
+      raiseRatePct: 1.5,
+      raiseStopAge: 55,
+    },
+    {
+      id: 'inc-pension',
+      owner: 'self',
+      kind: 'pension',
+      label: '年金',
+      startAge: 65,
+      amountMan: 15,
+      basis: 'monthly',
+      isGross: false,
+    },
+    {
+      id: 'inc-retirement',
+      owner: 'self',
+      kind: 'retirement',
+      label: '退職金',
+      startAge: 65,
+      amountMan: 1000,
+      basis: 'annual',
+      isGross: false,
+      oneTime: true,
+    },
+  ],
   expenses: [
     { id: 'exp-living', label: '生活費', amountMan: 20 },
     { id: 'exp-insurance', label: '保険', amountMan: 2 },
@@ -143,8 +185,25 @@ export interface Plan {
 export interface PlansState {
   /** データ構造のバージョン */
   version: number;
+  /** 全プラン共通の設定（収入・支出・イベント） */
+  common: CommonSettings;
   /** すべてのプラン */
   plans: Plan[];
   /** 現在表示中のプランID */
   activeId: string;
+}
+
+/** 全プランで共有する設定。各プランはこれを継承し、専用項目を足せる。 */
+export interface CommonSettings {
+  /** 共通の収入項目 */
+  incomes: IncomeItem[];
+  /** 共通の支出項目 */
+  expenses: ExpenseItem[];
+  /** 共通のライフイベント */
+  events: LifeEvent[];
+}
+
+/** 空の共通設定を作る。 */
+export function emptyCommon(): CommonSettings {
+  return { incomes: [], expenses: [], events: [] };
 }

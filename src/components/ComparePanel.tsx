@@ -9,14 +9,15 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { simulatePlan } from '../lib/plan';
+import { simulatePlan, mergeCommonForm } from '../lib/plan';
 import { formatYen, formatJpyCompact } from '../lib/format';
-import type { Plan } from '../types';
+import type { CommonSettings, Plan } from '../types';
 import type { Theme } from '../hooks/useTheme';
 import { PLAN_COLORS } from '../lib/planColors';
 
 interface ComparePanelProps {
   plans: Plan[];
+  common: CommonSettings;
   theme: Theme;
 }
 
@@ -38,8 +39,11 @@ function CompareRow({ label, values }: { label: string; values: string[] }) {
   );
 }
 
-export function ComparePanel({ plans, theme }: ComparePanelProps) {
-  const results = plans.map((p) => ({ plan: p, result: simulatePlan(p.form) }));
+export function ComparePanel({ plans, common, theme }: ComparePanelProps) {
+  const results = plans.map((p) => ({
+    plan: p,
+    result: simulatePlan(mergeCommonForm(p.form, common)),
+  }));
 
   const axisColor = theme === 'dark' ? '#94a3b8' : '#64748b';
   const gridColor = theme === 'dark' ? '#1e293b' : '#e2e8f0';
