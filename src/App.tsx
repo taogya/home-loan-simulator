@@ -196,6 +196,7 @@ function App() {
   const [chartTab, setChartTab] = useState<ChartTabId>('balance')
   const [viewMode, setViewMode] = useState<'edit' | 'compare'>('edit')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [mobileView, setMobileView] = useState<'input' | 'result'>('input')
 
   useEffect(() => {
     savePlans(plansState)
@@ -369,6 +370,107 @@ function App() {
       }
     })
 
+  // グループ単位で共通/専用をまとめて切り替える
+  const setCommonExpenses = (ids: string[], toCommon: boolean) =>
+    setPlansState((prev) => {
+      const idSet = new Set(ids)
+      if (toCommon) {
+        const active = prev.plans.find((p) => p.id === prev.activeId)
+        if (!active) return prev
+        const moving = active.form.expenses.filter((e) => idSet.has(e.id))
+        if (moving.length === 0) return prev
+        const movingIds = new Set(moving.map((e) => e.id))
+        return {
+          ...prev,
+          common: {
+            ...prev.common,
+            expenses: [...prev.common.expenses, ...moving],
+          },
+          plans: prev.plans.map((p) =>
+            p.id === prev.activeId
+              ? {
+                  ...p,
+                  form: {
+                    ...p.form,
+                    expenses: p.form.expenses.filter((e) => !movingIds.has(e.id)),
+                  },
+                }
+              : p,
+          ),
+        }
+      }
+      const moving = prev.common.expenses.filter((e) => idSet.has(e.id))
+      if (moving.length === 0) return prev
+      const movingIds = new Set(moving.map((e) => e.id))
+      return {
+        ...prev,
+        common: {
+          ...prev.common,
+          expenses: prev.common.expenses.filter((e) => !movingIds.has(e.id)),
+        },
+        plans: prev.plans.map((p) => ({
+          ...p,
+          form: {
+            ...p.form,
+            expenses: [
+              ...p.form.expenses,
+              ...moving.map((e) => ({ ...e, id: crypto.randomUUID() })),
+            ],
+          },
+        })),
+      }
+    })
+
+  const setCommonEvents = (ids: string[], toCommon: boolean) =>
+    setPlansState((prev) => {
+      const idSet = new Set(ids)
+      if (toCommon) {
+        const active = prev.plans.find((p) => p.id === prev.activeId)
+        if (!active) return prev
+        const moving = active.form.events.filter((e) => idSet.has(e.id))
+        if (moving.length === 0) return prev
+        const movingIds = new Set(moving.map((e) => e.id))
+        return {
+          ...prev,
+          common: {
+            ...prev.common,
+            events: [...prev.common.events, ...moving],
+          },
+          plans: prev.plans.map((p) =>
+            p.id === prev.activeId
+              ? {
+                  ...p,
+                  form: {
+                    ...p.form,
+                    events: p.form.events.filter((e) => !movingIds.has(e.id)),
+                  },
+                }
+              : p,
+          ),
+        }
+      }
+      const moving = prev.common.events.filter((e) => idSet.has(e.id))
+      if (moving.length === 0) return prev
+      const movingIds = new Set(moving.map((e) => e.id))
+      return {
+        ...prev,
+        common: {
+          ...prev.common,
+          events: prev.common.events.filter((e) => !movingIds.has(e.id)),
+        },
+        plans: prev.plans.map((p) => ({
+          ...p,
+          form: {
+            ...p.form,
+            events: [
+              ...p.form.events,
+              ...moving.map((e) => ({ ...e, id: crypto.randomUUID() })),
+            ],
+          },
+        })),
+      }
+    })
+
   // 収入
   const addIncome = (item: IncomeItem) =>
     setPlansState((prev) =>
@@ -460,10 +562,24 @@ function App() {
 
   const createPlanFromWizard = (form: FormState) => {
     setPlansState((prev) => {
+      // すでに共通(📌)になっている項目と同名のものは作らない（共通を優先・重複防止）
+      const commonExpenseLabels = new Set(
+        prev.common.expenses.map((e) => e.label),
+      )
+      const commonEventLabels = new Set(prev.common.events.map((e) => e.label))
+      const commonIncomeLabels = new Set(prev.common.incomes.map((i) => i.label))
+      const dedupedForm: FormState = {
+        ...form,
+        expenses: form.expenses.filter(
+          (e) => !commonExpenseLabels.has(e.label),
+        ),
+        events: form.events.filter((e) => !commonEventLabels.has(e.label)),
+        incomes: form.incomes.filter((i) => !commonIncomeLabels.has(i.label)),
+      }
       const plan: Plan = {
         id: crypto.randomUUID(),
         name: makePlanName(prev.plans.length),
-        form,
+        form: dedupedForm,
       }
       return { ...prev, plans: [...prev.plans, plan], activeId: plan.id }
     })
@@ -498,6 +614,10 @@ function App() {
   const removePlan = () =>
     setPlansState((prev) => {
       const plans = prev.plans.filter((p) => p.id !== prev.activeId)
+      // すべてのプランを削除したら共通設定もリセット（まっさらな状態から始められるように）
+      if (plans.length === 0) {
+        return { ...prev, plans, activeId: '', common: emptyCommon() }
+      }
       return { ...prev, plans, activeId: plans[0]?.id ?? '' }
     })
 
@@ -569,6 +689,9 @@ function App() {
   const mergedIncomes = [...common.incomes, ...form.incomes]
   const mergedExpenses = [...common.expenses, ...form.expenses]
   const mergedEvents = [...common.events, ...form.events]
+
+  // 貯蓄が一度でもマイナスになる時期（フローティングカードで警告するため）
+  const firstNegativeSaving = result.schedule.find((s) => s.savings < 0)
 
   const burdenColor =
     result.repaymentBurdenPct < 25
@@ -669,8 +792,37 @@ function App() {
         {viewMode === 'compare' ? (
           <ComparePanel plans={plans} common={common} theme={theme} />
         ) : (
-          <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1">
+          <>
+          <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60 lg:hidden">
+            {(
+              [
+                ['input', '入力'],
+                ['result', '結果'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  setMobileView(v)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  mobileView === v
+                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                    : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
+        <div
+          className={`lg:col-span-1 lg:block ${
+            mobileView === 'input' ? '' : 'hidden'
+          }`}
+        >
           <InputPanel
             value={form}
             onChange={update}
@@ -679,11 +831,13 @@ function App() {
             onRemoveEvent={removeEvent}
             onUpdateEvent={updateEvent}
             onToggleCommonEvent={toggleCommonEvent}
+            onSetCommonEvents={setCommonEvents}
             expenses={mergedExpenses}
             onAddExpense={addExpense}
             onRemoveExpense={removeExpense}
             onUpdateExpense={updateExpense}
             onToggleCommonExpense={toggleCommonExpense}
+            onSetCommonExpenses={setCommonExpenses}
             incomes={mergedIncomes}
             onAddIncome={addIncome}
             onRemoveIncome={removeIncome}
@@ -692,7 +846,11 @@ function App() {
             commonIds={commonIds}
           />
         </div>
-        <div className="space-y-6 lg:col-span-2">
+        <div
+          className={`space-y-6 lg:col-span-2 lg:sticky lg:top-20 lg:self-start lg:block ${
+            mobileView === 'result' ? '' : 'hidden'
+          }`}
+        >
           <StatHighlight result={result} />
           <div className="space-y-3">
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -739,6 +897,7 @@ function App() {
           </div>
         </div>
           </div>
+          </>
         )}
       </main>
 
@@ -784,6 +943,24 @@ function App() {
             <p className="mb-0.5 truncate text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
               {activePlan?.name}
             </p>
+          )}
+          {firstNegativeSaving && (
+            <div className="mb-1 flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              >
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <path d="M12 9v4M12 17h.01" />
+              </svg>
+              {firstNegativeSaving.age}歳ごろ貯蓄がマイナスになります
+            </div>
           )}
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             <div className="flex items-center gap-1.5">

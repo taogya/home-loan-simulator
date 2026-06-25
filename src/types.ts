@@ -15,6 +15,8 @@ export interface LifeEvent {
   intervalYears?: number;
   /** 繰り返し終了年齢（intervalYears>0 のとき有効） */
   untilAge?: number;
+  /** グループ名（空=単独表示、同じ名はまとめて折りたたみ表示） */
+  group?: string;
 }
 
 export interface ExpenseItem {
@@ -28,6 +30,8 @@ export interface ExpenseItem {
   startAfterYears?: number;
   /** 何年間続くか（0/undefined=ずっと） */
   durationYears?: number;
+  /** グループ名（空=単独表示、同じ名はまとめて折りたたみ表示） */
+  group?: string;
 }
 
 /** 収入の持ち主（税は本人・配偶者で個別に計算、その他は手取り直接） */

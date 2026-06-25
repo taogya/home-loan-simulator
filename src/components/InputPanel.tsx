@@ -11,23 +11,23 @@ import type {
   IncomeKind,
 } from '../types';
 
-const EXPENSE_PRESETS: { label: string; amountMan: number }[] = [
+const EXPENSE_PRESETS: { label: string; amountMan: number; group?: string }[] = [
   { label: '生活費', amountMan: 20 },
   { label: '食費', amountMan: 5 },
   { label: '日用品', amountMan: 1 },
   { label: '水道光熱費', amountMan: 2 },
   { label: '通信費', amountMan: 1 },
   { label: 'サブスク', amountMan: 0.5 },
-  { label: '車の維持費', amountMan: 2 },
-  { label: '車のローン', amountMan: 3 },
+  { label: '車の維持費', amountMan: 2, group: '車' },
+  { label: '車のローン', amountMan: 3, group: '車' },
   { label: '保険', amountMan: 2 },
   { label: '固定資産税', amountMan: 1 },
   { label: '修繕・管理費', amountMan: 1.5 },
-  { label: '教育費（幼稚園）', amountMan: 1.5 },
-  { label: '教育費（小学校）', amountMan: 3 },
-  { label: '教育費（中学校）', amountMan: 5 },
-  { label: '教育費（高校）', amountMan: 4.5 },
-  { label: '教育費（大学）', amountMan: 4.5 },
+  { label: '幼稚園', amountMan: 1.5, group: '教育費' },
+  { label: '小学校', amountMan: 3, group: '教育費' },
+  { label: '中学校', amountMan: 5, group: '教育費' },
+  { label: '高校', amountMan: 4.5, group: '教育費' },
+  { label: '大学', amountMan: 4.5, group: '教育費' },
   { label: '奨学金返済', amountMan: 2 },
   { label: '医療費', amountMan: 1 },
   { label: '被服費', amountMan: 1 },
@@ -42,12 +42,13 @@ const LIFE_EVENT_PRESETS: {
   yearsLater: number;
   intervalYears?: number;
   untilAge?: number;
+  group?: string;
 }[] = [
-  { label: '車の買い替え', amountMan: 150, yearsLater: 10, intervalYears: 10, untilAge: 75 },
-  { label: '車検', amountMan: 20, yearsLater: 2, intervalYears: 2, untilAge: 80 },
-  { label: 'リフォーム', amountMan: 300, yearsLater: 30, intervalYears: 30, untilAge: 100 },
-  { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 15, intervalYears: 15, untilAge: 100 },
-  { label: '給湯器の交換', amountMan: 50, yearsLater: 15, intervalYears: 15, untilAge: 100 },
+  { label: '車の買い替え', amountMan: 150, yearsLater: 10, intervalYears: 10, untilAge: 75, group: '車' },
+  { label: '車検', amountMan: 20, yearsLater: 2, intervalYears: 2, untilAge: 80, group: '車' },
+  { label: 'リフォーム', amountMan: 300, yearsLater: 30, intervalYears: 30, untilAge: 100, group: '住まいの修繕' },
+  { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 15, intervalYears: 15, untilAge: 100, group: '住まいの修繕' },
+  { label: '給湯器の交換', amountMan: 50, yearsLater: 15, intervalYears: 15, untilAge: 100, group: '住まいの修繕' },
   { label: 'エアコン買い替え', amountMan: 15, yearsLater: 10, intervalYears: 10, untilAge: 100 },
   { label: '出産', amountMan: 20, yearsLater: 2 },
   { label: '大学入学金', amountMan: 30, yearsLater: 18 },
@@ -123,6 +124,66 @@ function expenseActiveAtElapsed(e: ExpenseItem, elapsed: number): boolean {
   return true;
 }
 
+/** 明示的な group フィールドで項目をまとめる。group 空＝単独（name:null）。出現順を保持。 */
+function groupItems<T extends { group?: string }>(
+  items: T[],
+): { name: string | null; items: T[] }[] {
+  const result: { name: string | null; items: T[] }[] = [];
+  for (const it of items) {
+    const g = it.group?.trim();
+    if (!g) {
+      result.push({ name: null, items: [it] });
+      continue;
+    }
+    let bucket = result.find((r) => r.name === g);
+    if (!bucket) {
+      bucket = { name: g, items: [] };
+      result.push(bucket);
+    }
+    bucket.items.push(it);
+  }
+  return result;
+}
+
+/** 既存項目から使われているグループ名の一覧（重複なし・出現順）。 */
+function existingGroups(items: { group?: string }[]): string[] {
+  const seen: string[] = [];
+  for (const it of items) {
+    const g = it.group?.trim();
+    if (g && !seen.includes(g)) seen.push(g);
+  }
+  return seen;
+}
+
+/** 期間を考慮した「今の月額」と「最大の月額（ピーク年齢）」を求める。 */
+function monthlyExpenseStats(items: ExpenseItem[], age: number) {
+  const current = items
+    .filter((e) => expenseActiveAtElapsed(e, 0))
+    .reduce((s, e) => s + e.amountMan, 0);
+  let peak = current;
+  let peakAge = age;
+  for (let el = 0; el <= Math.max(1, 100 - age); el++) {
+    const sum = items
+      .filter((e) => expenseActiveAtElapsed(e, el))
+      .reduce((s, e) => s + e.amountMan, 0);
+    if (sum > peak) {
+      peak = sum;
+      peakAge = age + el;
+    }
+  }
+  return { current, peak, peakAge };
+}
+
+/** 支出の期間を短く表示する（ずっと / ○〜○歳 / ○歳〜）。 */
+function expensePeriodSummary(e: ExpenseItem, age: number): string {
+  const start = e.startAfterYears ?? 0;
+  const dur = e.durationYears ?? 0;
+  if (!start && !dur) return 'ずっと';
+  const fromAge = age + start;
+  if (dur > 0) return `${fromAge}〜${fromAge + dur - 1}歳`;
+  return `${fromAge}歳〜`;
+}
+
 interface InputPanelProps {
   value: FormState;
   onChange: (patch: Partial<FormState>) => void;
@@ -141,25 +202,9 @@ interface InputPanelProps {
   onToggleCommonIncome: (id: string) => void;
   onToggleCommonExpense: (id: string) => void;
   onToggleCommonEvent: (id: string) => void;
+  onSetCommonExpenses: (ids: string[], toCommon: boolean) => void;
+  onSetCommonEvents: (ids: string[], toCommon: boolean) => void;
   commonIds: Set<string>;
-}
-
-function PencilIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3 w-3 text-slate-400 transition group-hover:text-indigo-500"
-      aria-hidden="true"
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-    </svg>
-  );
 }
 
 function PinIcon({ filled }: { filled: boolean }) {
@@ -226,6 +271,87 @@ function PanelChevron({ open }: { open: boolean }) {
   );
 }
 
+/** グループを示すフォルダアイコン（色だけに頼らない視認用）。 */
+function FolderIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400"
+      aria-hidden="true"
+    >
+      <path d="M4 5h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+    </svg>
+  );
+}
+
+/** 共通（📌）であることを色に頼らずテキストで示すバッジ。 */
+function CommonBadge({ partial }: { partial?: boolean }) {
+  return (
+    <span className="shrink-0 rounded-full border border-indigo-300 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+      {partial ? '一部共通' : '共通'}
+    </span>
+  );
+}
+
+/** グループ選択フィールド（既存グループから選ぶ／新規入力／なし）。 */
+function GroupField({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+        グループ（任意・同じ名前でまとめて表示）
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+            value.trim() === ''
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+          }`}
+        >
+          なし
+        </button>
+        {options.map((g) => (
+          <button
+            key={g}
+            type="button"
+            onClick={() => onChange(g)}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+              value.trim() === g
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+            }`}
+          >
+            {g}
+          </button>
+        ))}
+      </div>
+      <input
+        type="text"
+        value={value}
+        placeholder="新しいグループ名（例: 教育費）"
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+        aria-label="グループ名"
+      />
+    </div>
+  );
+}
+
 export function InputPanel({
   value,
   onChange,
@@ -244,6 +370,8 @@ export function InputPanel({
   onToggleCommonIncome,
   onToggleCommonExpense,
   onToggleCommonEvent,
+  onSetCommonExpenses,
+  onSetCommonEvents,
   commonIds,
 }: InputPanelProps) {
   const [open, setOpen] = useState(true);
@@ -256,10 +384,32 @@ export function InputPanel({
   const [evRecurring, setEvRecurring] = useState(false);
   const [evInterval, setEvInterval] = useState('10');
   const [evUntilAge, setEvUntilAge] = useState(String(value.age + 30));
-  const [customExpenseLabel, setCustomExpenseLabel] = useState('');
-  const [expenseError, setExpenseError] = useState(false);
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [expenseDraft, setExpenseDraft] = useState('');
+  const [evGroup, setEvGroup] = useState('');
+  // 支出シート（追加式・イベントと同じ作法）
+  const [expSheetOpen, setExpSheetOpen] = useState(false);
+  const [expEditingId, setExpEditingId] = useState<string | null>(null);
+  const [expError, setExpError] = useState(false);
+  const [expLabel, setExpLabel] = useState('');
+  const [expAmount, setExpAmount] = useState('3');
+  const [expStartAfter, setExpStartAfter] = useState('');
+  const [expDuration, setExpDuration] = useState('');
+  const [expGroup, setExpGroup] = useState('');
+  const [openExpenseGroups, setOpenExpenseGroups] = useState<Set<string>>(new Set());
+  const [openEventGroups, setOpenEventGroups] = useState<Set<string>>(new Set());
+  const toggleExpenseGroup = (name: string) =>
+    setOpenExpenseGroups((prev) => {
+      const n = new Set(prev);
+      if (n.has(name)) n.delete(name);
+      else n.add(name);
+      return n;
+    });
+  const toggleEventGroup = (name: string) =>
+    setOpenEventGroups((prev) => {
+      const n = new Set(prev);
+      if (n.has(name)) n.delete(name);
+      else n.add(name);
+      return n;
+    });
 
   const resetEventForm = () => {
     setEditingId(null);
@@ -270,6 +420,7 @@ export function InputPanel({
     setEvRecurring(false);
     setEvInterval('10');
     setEvUntilAge(String(value.age + 30));
+    setEvGroup('');
   };
 
   const closeEvSheet = () => {
@@ -287,6 +438,7 @@ export function InputPanel({
     setEvRecurring(recurring);
     setEvInterval(String(preset.intervalYears ?? 10));
     setEvUntilAge(String(preset.untilAge ?? value.age + 30));
+    setEvGroup(preset.group ?? '');
     setEvSheetOpen(true);
   };
 
@@ -300,6 +452,7 @@ export function InputPanel({
     setEvRecurring((e.intervalYears ?? 0) > 0);
     setEvInterval(String(e.intervalYears || 10));
     setEvUntilAge(String(e.untilAge ?? value.age + 30));
+    setEvGroup(e.group ?? '');
   };
 
   const handleSubmitEvent = () => {
@@ -316,6 +469,7 @@ export function InputPanel({
       amountMan: Number(evAmount) || 0,
       intervalYears: recurring ? Math.max(1, Number(evInterval) || 1) : 0,
       untilAge: recurring ? Math.max(atAge, Number(evUntilAge) || atAge) : undefined,
+      group: evGroup.trim() || undefined,
     };
     if (editingId) {
       onUpdateEvent(editingId, payload);
@@ -329,42 +483,74 @@ export function InputPanel({
   const availablePresets = EXPENSE_PRESETS.filter(
     (p) => !expenses.some((e) => e.label === p.label),
   );
-  // 「今の月額」（現在有効な項目の合計）と「最大の月額」（期間を考慮したピーク）
-  const currentExpenseMan = expenses
-    .filter((e) => expenseActiveAtElapsed(e, 0))
-    .reduce((sum, e) => sum + e.amountMan, 0);
-  let peakExpenseMan = currentExpenseMan;
-  let peakExpenseAge = value.age;
-  for (let el = 0; el <= Math.max(1, 100 - value.age); el++) {
-    const sum = expenses
-      .filter((e) => expenseActiveAtElapsed(e, el))
-      .reduce((s, e) => s + e.amountMan, 0);
-    if (sum > peakExpenseMan) {
-      peakExpenseMan = sum;
-      peakExpenseAge = value.age + el;
-    }
-  }
+  const expenseStats = monthlyExpenseStats(expenses, value.age);
+  const expenseGroupList = groupItems(expenses);
+  const expenseGroupOptions = existingGroups(expenses);
 
-  const handleAddCustomExpense = () => {
-    const label = customExpenseLabel.trim();
+  const resetExpenseForm = () => {
+    setExpEditingId(null);
+    setExpLabel('');
+    setExpAmount('3');
+    setExpStartAfter('');
+    setExpDuration('');
+    setExpGroup('');
+    setExpError(false);
+  };
+
+  const closeExpSheet = () => {
+    resetExpenseForm();
+    setExpSheetOpen(false);
+  };
+
+  const openExpensePreset = (preset: (typeof EXPENSE_PRESETS)[number]) => {
+    setExpEditingId(null);
+    setExpLabel(preset.label);
+    setExpAmount(String(preset.amountMan));
+    setExpStartAfter('');
+    setExpDuration('');
+    setExpGroup(preset.group ?? '');
+    setExpError(false);
+    setExpSheetOpen(true);
+  };
+
+  const openExpenseCustom = () => {
+    resetExpenseForm();
+    setExpSheetOpen(true);
+  };
+
+  const startEditExpense = (e: ExpenseItem) => {
+    setExpEditingId(e.id);
+    setExpLabel(e.label);
+    setExpAmount(String(e.amountMan));
+    setExpStartAfter(e.startAfterYears ? String(e.startAfterYears) : '');
+    setExpDuration(e.durationYears ? String(e.durationYears) : '');
+    setExpGroup(e.group ?? '');
+    setExpError(false);
+    setExpSheetOpen(true);
+  };
+
+  const handleSubmitExpense = () => {
+    const label = expLabel.trim();
     if (!label) {
-      setExpenseError(true);
+      setExpError(true);
       return;
     }
-    onAddExpense({ id: crypto.randomUUID(), label, amountMan: 3 });
-    setCustomExpenseLabel('');
-  };
-
-  const startEditExpense = (id: string, current: number) => {
-    setExpenseDraft(String(current));
-    setEditingExpenseId(id);
-  };
-  const commitExpense = (id: string) => {
-    const n = Number(expenseDraft);
-    if (!Number.isNaN(n) && expenseDraft.trim() !== '') {
-      onUpdateExpense(id, { amountMan: Math.max(0, n) });
-    }
-    setEditingExpenseId(null);
+    const startAfterYears = Number(expStartAfter) || 0;
+    const durNum = Number(expDuration);
+    const durationYears =
+      expDuration.trim() === '' || !Number.isFinite(durNum) || durNum <= 0
+        ? undefined
+        : durNum;
+    const payload: Omit<ExpenseItem, 'id'> = {
+      label,
+      amountMan: Math.max(0, Number(expAmount) || 0),
+      startAfterYears: startAfterYears > 0 ? startAfterYears : undefined,
+      durationYears,
+      group: expGroup.trim() || undefined,
+    };
+    if (expEditingId) onUpdateExpense(expEditingId, payload);
+    else onAddExpense({ id: crypto.randomUUID(), ...payload });
+    closeExpSheet();
   };
 
   // 収入シート（追加式）
@@ -494,6 +680,107 @@ export function InputPanel({
   const incEffectiveKind: IncomeKind = incOwner === 'other' ? 'other' : incKind;
   const incIsSalary = incEffectiveKind === 'salary';
   const incIsRetirement = incEffectiveKind === 'retirement';
+
+  const renderExpenseRow = (e: ExpenseItem) => (
+    <div
+      key={e.id}
+      className="rounded-lg bg-white px-3 py-1.5 dark:bg-slate-900"
+    >
+      <div className="flex items-center gap-2">
+        <PinButton
+          active={commonIds.has(e.id)}
+          onClick={() => onToggleCommonExpense(e.id)}
+        />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+          {e.label}
+        </span>
+        {commonIds.has(e.id) && <CommonBadge />}
+        <span className="shrink-0 text-sm font-semibold text-slate-900 dark:text-white">
+          {formatManLabel(e.amountMan)}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2 pl-8">
+        <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+          期間：{expensePeriodSummary(e, value.age)}
+        </span>
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => startEditExpense(e)}
+            className="text-xs text-slate-400 transition hover:text-indigo-500"
+          >
+            編集
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemoveExpense(e.id)}
+            className="text-xs text-slate-400 transition hover:text-rose-500"
+          >
+            削除
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+
+  const renderEventRow = (e: LifeEvent) => {
+    const yearsLater = e.atAge - value.age;
+    const editing = editingId === e.id;
+    return (
+      <div
+        key={e.id}
+        className={`rounded-lg px-3 py-1.5 ${
+          editing
+            ? 'bg-indigo-50 ring-1 ring-indigo-300 dark:bg-indigo-950/40 dark:ring-indigo-700'
+            : 'bg-white dark:bg-slate-900'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <PinButton
+            active={commonIds.has(e.id)}
+            onClick={() => onToggleCommonEvent(e.id)}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+            {e.label}
+          </span>
+          {commonIds.has(e.id) && <CommonBadge />}
+          <span className="shrink-0 text-sm font-semibold text-slate-900 dark:text-white">
+            {formatManLabel(e.amountMan)}
+          </span>
+        </div>
+        <div className="mt-1 flex items-center justify-between gap-2 pl-8">
+          <span className="flex flex-wrap items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            {yearsLater <= 0 ? '今' : `${yearsLater}年後`}（{e.atAge}歳）
+            {e.intervalYears && e.intervalYears > 0 ? (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+                {e.intervalYears}年ごと
+                {e.untilAge ? `〜${e.untilAge}歳` : ''}
+              </span>
+            ) : null}
+          </span>
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => startEditEvent(e)}
+              className="text-xs text-slate-400 transition hover:text-indigo-500"
+            >
+              編集
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (editingId === e.id) resetEventForm();
+                onRemoveEvent(e.id);
+              }}
+              className="text-xs text-slate-400 transition hover:text-rose-500"
+            >
+              削除
+            </button>
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="card p-5">
@@ -980,126 +1267,87 @@ export function InputPanel({
         )}
       </CollapsibleSection>
 
-      {/* 毎月の支出（追加式） */}
+      {/* 毎月の支出（追加式・シート統一） */}
       <CollapsibleSection title="毎月の支出">
         <div className="flex items-center justify-between">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            項目ごとに月額を調整。定番から追加・自由に追加できます
+            定番から追加・自由に追加。各項目の「編集」で金額・期間・グループを変更できます
           </p>
           <span className="shrink-0 text-right">
             <span className="text-sm font-bold text-slate-900 dark:text-white">
-              今 {formatManLabel(currentExpenseMan)}
+              今 {formatManLabel(expenseStats.current)}
             </span>
-            {peakExpenseMan > currentExpenseMan && (
+            {expenseStats.peak > expenseStats.current && (
               <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                最大 {formatManLabel(peakExpenseMan)}（{peakExpenseAge}歳頃）
+                最大 {formatManLabel(expenseStats.peak)}（{expenseStats.peakAge}歳頃）
               </span>
             )}
           </span>
         </div>
 
         {expenses.length > 0 && (
-          <div className="space-y-3">
-            {expenses.map((e) => (
-              <div key={e.id} className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5">
+          <div className="space-y-2">
+            {expenseGroupList.map((g) => {
+              if (g.name === null) return renderExpenseRow(g.items[0]);
+              const open = openExpenseGroups.has(g.name);
+              const stats = monthlyExpenseStats(g.items, value.age);
+              const ids = g.items.map((i) => i.id);
+              const allCommon = g.items.every((i) => commonIds.has(i.id));
+              const someCommon = g.items.some((i) => commonIds.has(i.id));
+              return (
+                <div
+                  key={g.name}
+                  className="overflow-hidden rounded-xl border-2 border-slate-300 dark:border-slate-600"
+                >
+                  <div className="flex w-full items-center gap-1 bg-slate-100 px-2 py-1.5 dark:bg-slate-800/60">
                     <PinButton
-                      active={commonIds.has(e.id)}
-                      onClick={() => onToggleCommonExpense(e.id)}
+                      active={allCommon}
+                      onClick={() => onSetCommonExpenses(ids, !allCommon)}
                     />
-                    <span className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
-                      {e.label}
-                    </span>
-                  </span>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {editingExpenseId === e.id ? (
-                      <input
-                        type="number"
-                        value={expenseDraft}
-                        min={0}
-                        step={0.5}
-                        autoFocus
-                        onChange={(ev) => setExpenseDraft(ev.target.value)}
-                        onBlur={() => commitExpense(e.id)}
-                        onKeyDown={(ev) => {
-                          if (ev.key === 'Enter') commitExpense(e.id);
-                          if (ev.key === 'Escape') setEditingExpenseId(null);
-                        }}
-                        className="w-20 rounded-lg border border-indigo-300 bg-white px-2 py-0.5 text-right text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:border-indigo-600 dark:bg-slate-950 dark:text-white"
-                        aria-label={`${e.label}の月額を入力`}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => startEditExpense(e.id, e.amountMan)}
-                        title="タップして入力"
-                        className="group flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-sm font-semibold text-slate-900 transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                      >
-                        {formatManLabel(e.amountMan)}
-                        <PencilIcon />
-                      </button>
-                    )}
                     <button
                       type="button"
-                      onClick={() => onRemoveExpense(e.id)}
-                      className="text-xs text-slate-400 transition hover:text-rose-500"
+                      onClick={() => toggleExpenseGroup(g.name!)}
+                      className="flex flex-1 items-center justify-between gap-2 text-left"
                     >
-                      削除
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <FolderIcon />
+                        <span>{g.name}</span>
+                        <span className="shrink-0 text-xs font-normal text-slate-400">
+                          {g.items.length}項目
+                        </span>
+                        {allCommon ? (
+                          <CommonBadge />
+                        ) : someCommon ? (
+                          <CommonBadge partial />
+                        ) : null}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        最大 {formatManLabel(stats.peak)}
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                          aria-hidden="true"
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </span>
                     </button>
                   </div>
+                  {open && (
+                    <div className="border-t-2 border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-900">
+                      <div className="ml-1.5 space-y-1.5 border-l-2 border-slate-300 pl-2 dark:border-slate-600">
+                        {g.items.map((item) => renderExpenseRow(item))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={50}
-                  step={0.5}
-                  value={e.amountMan}
-                  onChange={(ev) =>
-                    onUpdateExpense(e.id, { amountMan: Number(ev.target.value) })
-                  }
-                  className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-indigo-600 dark:bg-slate-700"
-                  aria-label={`${e.label}の月額`}
-                />
-                <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                  <span>期間</span>
-                  <input
-                    type="number"
-                    value={e.startAfterYears ? e.startAfterYears : ''}
-                    min={0}
-                    max={50}
-                    placeholder="0"
-                    onChange={(ev) =>
-                      onUpdateExpense(e.id, {
-                        startAfterYears: ev.target.value
-                          ? Number(ev.target.value)
-                          : 0,
-                      })
-                    }
-                    className="w-12 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                    aria-label={`${e.label}を何年後から`}
-                  />
-                  <span>年後（{value.age + (e.startAfterYears ?? 0)}歳）から</span>
-                  <input
-                    type="number"
-                    value={e.durationYears ? e.durationYears : ''}
-                    min={0}
-                    max={60}
-                    placeholder="ずっと"
-                    onChange={(ev) =>
-                      onUpdateExpense(e.id, {
-                        durationYears: ev.target.value
-                          ? Number(ev.target.value)
-                          : undefined,
-                      })
-                    }
-                    className="w-16 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-right text-slate-700 placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                    aria-label={`${e.label}を何年間`}
-                  />
-                  <span>{e.durationYears ? '年間' : '（空＝ずっと）'}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -1113,51 +1361,142 @@ export function InputPanel({
                 <button
                   key={preset.label}
                   type="button"
-                  onClick={() =>
-                    onAddExpense({
-                      id: crypto.randomUUID(),
-                      label: preset.label,
-                      amountMan: preset.amountMan,
-                    })
-                  }
+                  onClick={() => openExpensePreset(preset)}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-700"
                 >
-                  ＋ {preset.label}
+                  ＋ {preset.group ? `${preset.group}・${preset.label}` : preset.label}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="text"
-            value={customExpenseLabel}
-            placeholder="例: 習い事"
-            onChange={(e) => {
-              setCustomExpenseLabel(e.target.value);
-              if (expenseError) setExpenseError(false);
-            }}
-            className={`min-w-0 flex-1 rounded-lg border bg-white px-2 py-1 text-sm dark:bg-slate-900 ${
-              expenseError
-                ? 'border-rose-400 ring-1 ring-rose-300 dark:border-rose-500'
-                : 'border-slate-200 dark:border-slate-700'
-            }`}
-            aria-label="支出項目名"
-          />
-          <button
-            type="button"
-            onClick={handleAddCustomExpense}
-            className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
-          >
-            追加
-          </button>
-          {expenseError && (
-            <p className="w-full text-xs font-medium text-rose-500">
-              支出項目名を入力してください
-            </p>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={openExpenseCustom}
+          className="w-full rounded-lg border border-dashed border-slate-300 py-2 text-sm font-medium text-slate-500 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-600 dark:text-slate-400 dark:hover:border-indigo-700"
+        >
+          ＋ 自由に追加
+        </button>
+
+        {expSheetOpen && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-center">
+            <button
+              type="button"
+              aria-label="閉じる"
+              className="absolute inset-0 cursor-default bg-slate-900/40 backdrop-blur-sm"
+              onClick={closeExpSheet}
+            />
+            <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden" />
+              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {expEditingId ? '支出を編集' : '支出を追加'}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    名前
+                  </p>
+                  <input
+                    type="text"
+                    value={expLabel}
+                    placeholder="例: 習い事"
+                    onChange={(e) => {
+                      setExpLabel(e.target.value);
+                      if (expError) setExpError(false);
+                    }}
+                    className={`w-full rounded-lg border bg-white px-2 py-1 text-sm dark:bg-slate-950 ${
+                      expError
+                        ? 'border-rose-400 ring-1 ring-rose-300 dark:border-rose-500'
+                        : 'border-slate-200 dark:border-slate-700'
+                    }`}
+                    aria-label="支出の名前"
+                  />
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    月額
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={expAmount}
+                      min={0}
+                      step={0.5}
+                      onChange={(e) => setExpAmount(e.target.value)}
+                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
+                      aria-label="月額（万円）"
+                    />
+                    <span className="text-xs text-slate-400">万円／月</span>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    期間（本人の年齢が基準）
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1 text-sm">
+                    <input
+                      type="number"
+                      value={expStartAfter}
+                      min={0}
+                      max={60}
+                      placeholder="0"
+                      onChange={(e) => setExpStartAfter(e.target.value)}
+                      className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
+                      aria-label="何年後から"
+                    />
+                    <span className="text-xs text-slate-400">
+                      年後（{value.age + (Number(expStartAfter) || 0)}歳）から
+                    </span>
+                    <input
+                      type="number"
+                      value={expDuration}
+                      min={0}
+                      max={80}
+                      placeholder="ずっと"
+                      onChange={(e) => setExpDuration(e.target.value)}
+                      className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
+                      aria-label="何年間"
+                    />
+                    <span className="text-xs text-slate-400">
+                      {expDuration.trim() ? '年間' : '年間（空＝ずっと）'}
+                    </span>
+                  </div>
+                </div>
+
+                <GroupField
+                  value={expGroup}
+                  onChange={setExpGroup}
+                  options={expenseGroupOptions}
+                />
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleSubmitExpense}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+                  >
+                    {expEditingId ? '更新' : '追加'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeExpSheet}
+                    className="rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    キャンセル
+                  </button>
+                  {expError && (
+                    <p className="text-xs font-medium text-rose-500">
+                      名前を入力してください
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection title="貯金・繰上げ・ボーナス払い">
@@ -1239,66 +1578,69 @@ export function InputPanel({
           車買い替え・リフォームなど一時的な出費を「何年後」で追加（グラフに縦線で表示されます）
         </p>
         {events.length > 0 && (
-          <ul className="space-y-1.5">
-            {[...events]
-              .sort((a, b) => a.atAge - b.atAge)
-              .map((e) => {
-                const yearsLater = e.atAge - value.age;
-                const editing = editingId === e.id;
-                return (
-                  <li
-                    key={e.id}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ${
-                      editing
-                        ? 'bg-indigo-50 ring-1 ring-indigo-300 dark:bg-indigo-950/40 dark:ring-indigo-700'
-                        : 'bg-white dark:bg-slate-900'
-                    }`}
-                  >
+          <div className="space-y-2">
+            {groupItems([...events].sort((a, b) => a.atAge - b.atAge)).map((g) => {
+              if (g.name === null) return renderEventRow(g.items[0]);
+              const open = openEventGroups.has(g.name);
+              const sum = g.items.reduce((s, e) => s + e.amountMan, 0);
+              const ids = g.items.map((i) => i.id);
+              const allCommon = g.items.every((i) => commonIds.has(i.id));
+              const someCommon = g.items.some((i) => commonIds.has(i.id));
+              return (
+                <div
+                  key={g.name}
+                  className="overflow-hidden rounded-xl border-2 border-slate-300 dark:border-slate-600"
+                >
+                  <div className="flex w-full items-center gap-1 bg-slate-100 px-2 py-1.5 dark:bg-slate-800/60">
                     <PinButton
-                      active={commonIds.has(e.id)}
-                      onClick={() => onToggleCommonEvent(e.id)}
+                      active={allCommon}
+                      onClick={() => onSetCommonEvents(ids, !allCommon)}
                     />
-                    <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-200">
-                      <span className="font-semibold">
-                        {yearsLater <= 0 ? '今' : `${yearsLater}年後`}
-                      </span>
-                      <span className="ml-1 text-xs text-slate-400">
-                        （{e.atAge}歳）
-                      </span>{' '}
-                      {e.label}
-                      {e.intervalYears && e.intervalYears > 0 ? (
-                        <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
-                          {e.intervalYears}年ごと
-                          {e.untilAge ? `〜${e.untilAge}歳` : ''}
+                    <button
+                      type="button"
+                      onClick={() => toggleEventGroup(g.name!)}
+                      className="flex flex-1 items-center justify-between gap-2 text-left"
+                    >
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <FolderIcon />
+                        <span>{g.name}</span>
+                        <span className="shrink-0 text-xs font-normal text-slate-400">
+                          {g.items.length}件
                         </span>
-                      ) : null}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium text-slate-500 dark:text-slate-400">
-                        {formatManLabel(e.amountMan)}
+                        {allCommon ? (
+                          <CommonBadge />
+                        ) : someCommon ? (
+                          <CommonBadge partial />
+                        ) : null}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => startEditEvent(e)}
-                        className="text-xs text-slate-400 transition hover:text-indigo-500"
-                      >
-                        編集
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (editingId === e.id) resetEventForm();
-                          onRemoveEvent(e.id);
-                        }}
-                        className="text-xs text-slate-400 transition hover:text-rose-500"
-                      >
-                        削除
-                      </button>
-                    </span>
-                  </li>
-                );
-              })}
-          </ul>
+                      <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        計 {formatManLabel(sum)}
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`h-4 w-4 transition-transform ${open ? '' : '-rotate-90'}`}
+                          aria-hidden="true"
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </span>
+                    </button>
+                  </div>
+                  {open && (
+                    <div className="border-t-2 border-slate-300 bg-white p-2 dark:border-slate-600 dark:bg-slate-900">
+                      <div className="ml-1.5 space-y-1.5 border-l-2 border-slate-300 pl-2 dark:border-slate-600">
+                        {g.items.map((item) => renderEventRow(item))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -1312,7 +1654,7 @@ export function InputPanel({
                 onClick={() => openPresetSheet(preset)}
                 className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-700"
               >
-                ＋ {preset.label}
+                ＋ {preset.group ? `${preset.group}・${preset.label}` : preset.label}
               </button>
             ))}
           </div>
@@ -1428,6 +1770,13 @@ export function InputPanel({
                   <span className="text-xs text-slate-400">歳まで</span>
                 </>
               )}
+            </div>
+            <div className="w-full pt-1">
+              <GroupField
+                value={evGroup}
+                onChange={setEvGroup}
+                options={existingGroups(events)}
+              />
             </div>
             <button
               type="button"

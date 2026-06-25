@@ -97,6 +97,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       label: '車の維持費',
       amountMan: 1.5 * input.carCount,
       durationYears: Math.max(1, 80 - age),
+      group: '車',
     });
   }
   input.childBirthOffsets.forEach((off, i) => {
@@ -108,10 +109,11 @@ function buildFormFromWizard(input: WizardInput): FormState {
       if (duration > 0) {
         expenses.push({
           id: uid(),
-          label: `教育費（子${i + 1}・${st.name}）`,
+          label: st.name,
           amountMan: st.monthlyMan,
           startAfterYears: Math.max(0, startElapsed),
           durationYears: duration,
+          group: `子${i + 1}の教育費`,
         });
       }
     });
@@ -127,6 +129,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       amountMan: 20 * n,
       intervalYears: 2,
       untilAge: 80,
+      group: '車',
     });
     events.push({
       id: uid(),
@@ -135,6 +138,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       amountMan: 150 * n,
       intervalYears: 10,
       untilAge: 80,
+      group: '車',
     });
   }
   if (input.housingType === 'own') {
@@ -145,6 +149,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       amountMan: 150,
       intervalYears: 15,
       untilAge: 100,
+      group: '住まいの修繕',
     });
     events.push({
       id: uid(),
@@ -153,6 +158,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       amountMan: 300,
       intervalYears: 30,
       untilAge: 100,
+      group: '住まいの修繕',
     });
   }
   input.childBirthOffsets.forEach((off, i) => {
@@ -164,6 +170,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
         atAge: birthAge,
         label: `出産（子${i + 1}）`,
         amountMan: 20,
+        group: `子${i + 1}のイベント`,
       });
     }
     // 大学入学金はこれから迎える場合のみ
@@ -174,6 +181,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
         atAge: uniAge,
         label: `大学入学金（子${i + 1}）`,
         amountMan: 30,
+        group: `子${i + 1}のイベント`,
       });
     }
   });
