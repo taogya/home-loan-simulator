@@ -44,6 +44,7 @@ const LIFE_EVENT_PRESETS: {
   untilAge?: number;
 }[] = [
   { label: '車の買い替え', amountMan: 150, yearsLater: 10, intervalYears: 10, untilAge: 75 },
+  { label: '車検', amountMan: 20, yearsLater: 2, intervalYears: 2, untilAge: 80 },
   { label: 'リフォーム', amountMan: 300, yearsLater: 30, intervalYears: 30, untilAge: 100 },
   { label: '外壁・屋根の修繕', amountMan: 150, yearsLater: 15, intervalYears: 15, untilAge: 100 },
   { label: '給湯器の交換', amountMan: 50, yearsLater: 15, intervalYears: 15, untilAge: 100 },
@@ -111,6 +112,15 @@ function incomeAgeLabel(inc: IncomeItem): string {
   if (inc.oneTime) return `${inc.startAge}歳`;
   if (inc.endAge != null && inc.endAge > 0) return `${inc.startAge}〜${inc.endAge}歳`;
   return `${inc.startAge}歳〜`;
+}
+
+/** その支出が経過年 elapsed で有効か（「○年後から○年間」を考慮） */
+function expenseActiveAtElapsed(e: ExpenseItem, elapsed: number): boolean {
+  const start = e.startAfterYears ?? 0;
+  const dur = e.durationYears ?? 0;
+  if (elapsed < start) return false;
+  if (dur > 0 && elapsed >= start + dur) return false;
+  return true;
 }
 
 interface InputPanelProps {
@@ -319,7 +329,21 @@ export function InputPanel({
   const availablePresets = EXPENSE_PRESETS.filter(
     (p) => !expenses.some((e) => e.label === p.label),
   );
-  const totalExpenseMan = expenses.reduce((sum, e) => sum + e.amountMan, 0);
+  // 「今の月額」（現在有効な項目の合計）と「最大の月額」（期間を考慮したピーク）
+  const currentExpenseMan = expenses
+    .filter((e) => expenseActiveAtElapsed(e, 0))
+    .reduce((sum, e) => sum + e.amountMan, 0);
+  let peakExpenseMan = currentExpenseMan;
+  let peakExpenseAge = value.age;
+  for (let el = 0; el <= Math.max(1, 100 - value.age); el++) {
+    const sum = expenses
+      .filter((e) => expenseActiveAtElapsed(e, el))
+      .reduce((s, e) => s + e.amountMan, 0);
+    if (sum > peakExpenseMan) {
+      peakExpenseMan = sum;
+      peakExpenseAge = value.age + el;
+    }
+  }
 
   const handleAddCustomExpense = () => {
     const label = customExpenseLabel.trim();
@@ -962,8 +986,15 @@ export function InputPanel({
           <p className="text-xs text-slate-400 dark:text-slate-500">
             項目ごとに月額を調整。定番から追加・自由に追加できます
           </p>
-          <span className="shrink-0 text-sm font-bold text-slate-900 dark:text-white">
-            計 {formatManLabel(totalExpenseMan)}
+          <span className="shrink-0 text-right">
+            <span className="text-sm font-bold text-slate-900 dark:text-white">
+              今 {formatManLabel(currentExpenseMan)}
+            </span>
+            {peakExpenseMan > currentExpenseMan && (
+              <span className="block text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                最大 {formatManLabel(peakExpenseMan)}（{peakExpenseAge}歳頃）
+              </span>
+            )}
           </span>
         </div>
 

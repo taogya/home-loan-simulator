@@ -14,7 +14,10 @@ interface WizardInput {
   bonusMonths: number;
   hasSpouse: boolean;
   spouseIncomeMan: number;
+  livingCostMan: number;
   childBirthOffsets: number[];
+  hasCar: boolean;
+  carCount: number;
   initialSavingsMan: number;
 }
 
@@ -85,9 +88,17 @@ function buildFormFromWizard(input: WizardInput): FormState {
   }
 
   const expenses: ExpenseItem[] = [
-    { id: uid(), label: '生活費', amountMan: input.hasSpouse ? 22 : 18 },
+    { id: uid(), label: '生活費', amountMan: input.livingCostMan },
     { id: uid(), label: '保険', amountMan: 2 },
   ];
+  if (input.hasCar) {
+    expenses.push({
+      id: uid(),
+      label: '車の維持費',
+      amountMan: 1.5 * input.carCount,
+      durationYears: Math.max(1, 80 - age),
+    });
+  }
   input.childBirthOffsets.forEach((off, i) => {
     // 学校段階ごとの月額教育費。すでに通った段階はスキップ、途中なら残り期間だけ
     EDU_STAGES.forEach((st) => {
@@ -106,16 +117,26 @@ function buildFormFromWizard(input: WizardInput): FormState {
     });
   });
 
-  const events: LifeEvent[] = [
-    {
+  const events: LifeEvent[] = [];
+  if (input.hasCar) {
+    const n = input.carCount;
+    events.push({
+      id: uid(),
+      atAge: age + 2,
+      label: '車検',
+      amountMan: 20 * n,
+      intervalYears: 2,
+      untilAge: 80,
+    });
+    events.push({
       id: uid(),
       atAge: age + 10,
       label: '車の買い替え',
-      amountMan: 150,
+      amountMan: 150 * n,
       intervalYears: 10,
-      untilAge: Math.min(age + 45, 80),
-    },
-  ];
+      untilAge: 80,
+    });
+  }
   if (input.housingType === 'own') {
     events.push({
       id: uid(),
@@ -123,7 +144,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       label: '外壁・屋根の修繕',
       amountMan: 150,
       intervalYears: 15,
-      untilAge: age + 45,
+      untilAge: 100,
     });
     events.push({
       id: uid(),
@@ -131,7 +152,7 @@ function buildFormFromWizard(input: WizardInput): FormState {
       label: 'リフォーム',
       amountMan: 300,
       intervalYears: 30,
-      untilAge: age + 60,
+      untilAge: 100,
     });
   }
   input.childBirthOffsets.forEach((off, i) => {
@@ -193,9 +214,12 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
   const [bonusMonths, setBonusMonths] = useState('4');
   const [hasSpouse, setHasSpouse] = useState(false);
   const [spouseIncomeMan, setSpouseIncomeMan] = useState('300');
+  const [livingCostMan, setLivingCostMan] = useState(18);
   const [children, setChildren] = useState<{ born: boolean; value: string }[]>(
     [],
   );
+  const [hasCar, setHasCar] = useState(true);
+  const [carCount, setCarCount] = useState(1);
   const [savings, setSavings] = useState('300');
 
   const setCount = (n: number) => {
@@ -222,10 +246,13 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
         bonusMonths: Number(bonusMonths) || 0,
         hasSpouse,
         spouseIncomeMan: hasSpouse ? Number(spouseIncomeMan) || 0 : 0,
+        livingCostMan,
         childBirthOffsets: children.map((c) => {
           const v = Number(c.value) || 0;
           return c.born ? -v : v;
         }),
+        hasCar,
+        carCount,
         initialSavingsMan: Number(savings) || 0,
       }),
     );
@@ -400,6 +427,36 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
             </label>
           </div>
 
+          {/* 生活費 */}
+          <div>
+            <p className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              生活費（月・教育費を除く）
+            </p>
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
+              {(
+                [
+                  [15, 'ひかえめ'],
+                  [18, '標準'],
+                  [22, 'ゆとり'],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setLivingCostMan(v)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
+                    livingCostMan === v
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {label}
+                  <span className="ml-1 text-[10px] font-normal">{v}万</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* 配偶者 */}
           <div>
             <div className="flex items-center justify-between">
@@ -541,6 +598,66 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
             )}
           </div>
 
+          {/* 車 */}
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                車
+              </span>
+              <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800/60">
+                {(
+                  [
+                    [true, '持つ'],
+                    [false, '持たない'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    onClick={() => setHasCar(v)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+                      hasCar === v
+                        ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                        : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {hasCar && (
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  台数
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCarCount((n) => Math.max(1, n - 1))}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:hover:bg-slate-800"
+                    disabled={carCount <= 1}
+                    aria-label="台数を減らす"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                    {carCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCarCount((n) => Math.min(3, n + 1))}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:hover:bg-slate-800"
+                    disabled={carCount >= 3}
+                    aria-label="台数を増やす"
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* 貯金 */}
           <label className="flex items-center justify-between gap-2">
             <span className="text-sm text-slate-700 dark:text-slate-200">
@@ -560,7 +677,8 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
           </label>
 
           <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">
-            このあと自動で追加: 車の買い替え・
+            このあと自動で追加:{' '}
+            {hasCar ? `車検・車の買い替え・車の維持費（${carCount}台分）・` : ''}
             {housingType === 'own' ? '外壁修繕・リフォーム・' : ''}
             {children.length > 0
               ? `教育費 幼〜大（子${children.length}人分）・出産・大学入学金・`
