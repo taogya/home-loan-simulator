@@ -1309,11 +1309,10 @@ export function InputPanel({
                       onClick={() => toggleExpenseGroup(g.name!)}
                       className="flex flex-1 items-center justify-between gap-2 text-left"
                     >
-                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        <FolderIcon />
-                        <span>{g.name}</span>
-                        <span className="shrink-0 text-xs font-normal text-slate-400">
-                          {g.items.length}項目
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <FolderIcon />
+                          <span className="truncate">{g.name}</span>
                         </span>
                         {allCommon ? (
                           <CommonBadge />
@@ -1601,11 +1600,10 @@ export function InputPanel({
                       onClick={() => toggleEventGroup(g.name!)}
                       className="flex flex-1 items-center justify-between gap-2 text-left"
                     >
-                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        <FolderIcon />
-                        <span>{g.name}</span>
-                        <span className="shrink-0 text-xs font-normal text-slate-400">
-                          {g.items.length}件
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <FolderIcon />
+                          <span className="truncate">{g.name}</span>
                         </span>
                         {allCommon ? (
                           <CommonBadge />
