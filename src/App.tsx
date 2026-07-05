@@ -6,10 +6,17 @@ import { CashFlowChart } from './components/CashFlowChart'
 import { SavingsChart } from './components/SavingsChart'
 import { PlanTabs } from './components/PlanTabs'
 import { ComparePanel } from './components/ComparePanel'
-import { PlanMenu } from './components/PlanMenu'
+import { PlanMenu, type AppScreen } from './components/PlanMenu'
 import { PlanWizard } from './components/PlanWizard'
+import { RateSimulatorScreen } from './components/rate/RateSimulatorScreen'
 import { simulatePlan, mergeCommonForm } from './lib/plan'
 import { loadPlans, savePlans, normalizeForm } from './lib/storage'
+import {
+  loadRateState,
+  saveRateState,
+  type RateSimState,
+} from './lib/rateStorage'
+import { isValidScenario, normalizeScenario } from './lib/rate'
 import { formatYen, formatManLabel } from './lib/format'
 import { DEFAULT_FORM, emptyCommon } from './types'
 import type {
@@ -197,10 +204,16 @@ function App() {
   const [viewMode, setViewMode] = useState<'edit' | 'compare'>('edit')
   const [wizardOpen, setWizardOpen] = useState(false)
   const [mobileView, setMobileView] = useState<'input' | 'result'>('input')
+  const [screen, setScreen] = useState<AppScreen>('lifeplan')
+  const [rateState, setRateState] = useState<RateSimState>(loadRateState)
 
   useEffect(() => {
     savePlans(plansState)
   }, [plansState])
+
+  useEffect(() => {
+    saveRateState(rateState)
+  }, [rateState])
 
   const { plans, activeId, common } = plansState
   const activePlan = plans.find((p) => p.id === activeId) ?? plans[0]
@@ -675,6 +688,45 @@ function App() {
     reader.readAsText(file)
   }
 
+  // 金利シナリオのエクスポート（金利シミュレータ画面用）
+  const exportScenario = () => {
+    const data = JSON.stringify(rateState.scenario, null, 2)
+    const blob = new Blob([data], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'rate-scenario.json'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  // 金利シナリオのインポート（金利シミュレータ画面用）
+  const importScenario = (file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result as string)
+        if (isValidScenario(parsed)) {
+          setRateState((prev) => ({ ...prev, scenario: normalizeScenario(parsed) }))
+        } else {
+          window.alert(
+            'このファイルは金利シナリオではないようです。金利シミュレータで保存したJSONをご確認ください。',
+          )
+        }
+      } catch {
+        window.alert('ファイルを読み込めませんでした。JSON形式をご確認ください。')
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  // メニューのインポート／エクスポートは画面ごとに役割が異なる
+  const handleMenuExport = () => (screen === 'rate' ? exportScenario() : exportJson())
+  const handleMenuImport = (file: File) =>
+    screen === 'rate' ? importScenario(file) : importJson(file)
+
   const result = useMemo(
     () => simulatePlan(mergeCommonForm(form, common)),
     [form, common],
@@ -709,11 +761,13 @@ function App() {
               おうちとお金の未来シミュレータ
             </h1>
             <p className="text-xs text-slate-400 dark:text-slate-500">
-              住宅ローンを「返す」ためのライフプラン
+              {screen === 'rate'
+                ? '金利シミュレータ｜プラン比較・金利シナリオ・過去の金利'
+                : '住宅ローンを「返す」ためのライフプラン'}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {plans.length > 0 && (
+            {screen === 'lifeplan' && plans.length > 0 && (
               <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
                 {(
                   [
@@ -736,7 +790,12 @@ function App() {
                 ))}
               </div>
             )}
-            <PlanMenu onExport={exportJson} onImport={importJson} />
+            <PlanMenu
+              screen={screen}
+              onNavigate={setScreen}
+              onExport={handleMenuExport}
+              onImport={handleMenuImport}
+            />
             <a
               href="https://github.com/taogya/home-loan-simulator"
               target="_blank"
@@ -759,6 +818,18 @@ function App() {
         </div>
       </header>
 
+      {screen === 'rate' && (
+        <RateSimulatorScreen
+          state={rateState}
+          onChange={setRateState}
+          theme={theme}
+          onExportScenario={exportScenario}
+          onImportScenario={importScenario}
+        />
+      )}
+
+      {screen === 'lifeplan' && (
+      <>
       <div className="mx-auto max-w-6xl px-4 pt-4">
         <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">
           <LockIcon />
@@ -1075,6 +1146,8 @@ function App() {
         </div>
       </div>
         </>
+      )}
+      </>
       )}
 
       {wizardOpen && (

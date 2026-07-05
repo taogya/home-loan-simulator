@@ -1,0 +1,67 @@
+{
+  "kind": "home-loan-rate-scenario",
+  "version": 1,
+  "name": "緩やか正常化・AIショック後低成長",
+  "reviewMonths": 6,
+  "rules": {
+    "paymentFixedYears": 5,
+    "paymentCapRatio": 1.25
+  },
+  "points": [
+    {
+      "fromMonth": 0,
+      "ratePct": 1.0,
+      "note": "2026年7月借入開始時の当初適用金利"
+    },
+    {
+      "fromMonth": 12,
+      "ratePct": 1.25,
+      "note": "金融正常化と段階的利上げの住宅ローン金利への波及"
+    },
+    {
+      "fromMonth": 24,
+      "ratePct": 1.45,
+      "note": "賃金・物価上昇の継続と既存変動金利への転嫁進行"
+    },
+    {
+      "fromMonth": 48,
+      "ratePct": 1.7,
+      "note": "構造的な人手不足とインフレ圧力を背景に上昇継続"
+    },
+    {
+      "fromMonth": 72,
+      "ratePct": 1.8,
+      "note": "家計・企業・住宅市場への負荷が強まる中で金利ピーク圏"
+    },
+    {
+      "fromMonth": 108,
+      "ratePct": 1.25,
+      "note": "AIインフラ過剰投資・供給者採算悪化・AI依存社会の混乱を伴う景気後退で低下"
+    },
+    {
+      "fromMonth": 168,
+      "ratePct": 1.4,
+      "note": "AI産業再編後の小幅回復。ただし人口減少と低成長が上昇を抑制"
+    },
+    {
+      "fromMonth": 228,
+      "ratePct": 1.3,
+      "note": "生産年齢人口減少・地方衰退・国内需要不足により再び低下"
+    },
+    {
+      "fromMonth": 288,
+      "ratePct": 1.25,
+      "note": "高齢化ピーク圏と低成長が下押しする一方、食料・輸入物価・円安リスクが低下余地を制約"
+    },
+    {
+      "fromMonth": 348,
+      "ratePct": 1.2,
+      "note": "人口減少と地方経済縮小が進み、長期低成長圏へ移行"
+    },
+    {
+      "fromMonth": 420,
+      "ratePct": 1.2,
+      "note": "人口減少・需要不足と供給制約型インフレが併存する長期低成長状態"
+    }
+  ]
+}
