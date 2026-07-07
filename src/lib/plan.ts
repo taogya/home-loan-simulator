@@ -70,6 +70,8 @@ export interface PlanResult {
   payoffYears: number;
   /** 返済負担率（年間返済額 / 年収, %） */
   repaymentBurdenPct: number;
+  /** 将来の最大月返済額（金利上昇時、固定金利などの場合は monthlyPayment と同じ） */
+  maxMonthlyPayment: number;
   /** ライフプラン中の貯金残高の最大（円） */
   maxSavings: number;
   /** 年ごとの推移（year=0 を含む） */
@@ -202,14 +204,69 @@ function annualIncomeAt(
   return estimateTakeHome(grossSelf) + estimateTakeHome(grossSpouse) + net;
 }
 
-export function simulatePlan(form: FormState): PlanResult {
+export function simulatePlan(form: FormState, rateState?: any): PlanResult {
   const isRent = form.housingType === 'rent';
   const principal = isRent ? 0 : form.loanAmountMan * 10000;
   const startAge = form.age;
   const years = form.years;
   const simYears = Math.max(years, 100 - startAge);
-  const rM = form.ratePct / 100 / 12;
-  const rB = form.ratePct / 100 / 2;
+
+  const interestType = form.interestType ?? 'fixed';
+  const scenario = rateState?.scenario;
+  const reviewMonths = scenario?.reviewMonths ?? 6;
+  const paymentFixedYears = scenario?.rules?.paymentFixedYears ?? 5;
+  const paymentCapRatio = scenario?.rules?.paymentCapRatio ?? 1.25;
+
+  // 1経過月ごとの金利（年利、%）を決定するヘルパー
+  const getRatePctAt = (elapsedMonths: number): number => {
+    if (isRent) return 0;
+    if (interestType === 'fixed') {
+      return form.ratePct;
+    }
+    if (interestType === 'variable') {
+      if (!scenario) return form.ratePct;
+      return scenarioRateAt(scenario, elapsedMonths);
+    }
+    if (interestType === 'product' && rateState) {
+      const p = rateState.products.find((x: any) => x.id === form.selectedProductId);
+      if (!p) return form.ratePct;
+      if (p.kind === 'wholeFixed') {
+        return p.initialRatePct;
+      }
+      if (p.kind === 'variable') {
+        if (!scenario) return p.initialRatePct;
+        return scenarioRateAt(scenario, elapsedMonths);
+      }
+      if (p.kind === 'fixedPeriod') {
+        const fixedMonths = (p.fixedYears ?? 0) * 12;
+        if (elapsedMonths < fixedMonths) {
+          return p.initialRatePct;
+        } else {
+          if (!scenario) return p.afterRatePct ?? 1.0;
+          // 固定期間終了後: afterRatePct + 当初からの金利変動分
+          const scenarioDelta = scenarioRateAt(scenario, elapsedMonths) - scenarioRateAt(scenario, 0);
+          return (p.afterRatePct ?? 1.0) + scenarioDelta;
+        }
+      }
+    }
+    return form.ratePct;
+  };
+
+  function scenarioRateAt(sc: any, month: number): number {
+    const points = sc.points;
+    if (!points || points.length === 0) return 0.5;
+    let rate = points[0]?.ratePct ?? 0;
+    for (const p of points) {
+      if (p.fromMonth <= month) rate = p.ratePct;
+      else break;
+    }
+    return rate;
+  }
+
+  // 初期金利
+  const initialRate = getRatePctAt(0);
+  const rM = initialRate / 100 / 12;
+  const rB = initialRate / 100 / 2;
 
   // ボーナス払い：1回の固定返済額から、ボーナスで返す元金（現在価値）を求める
   const bonus = isRent ? 0 : Math.max(0, form.bonusRepayMan * 10000);
@@ -224,6 +281,13 @@ export function simulatePlan(form: FormState): PlanResult {
   let totalInterest = 0;
   let payoffYears = isRent ? 0 : years;
   let payoffFound = isRent;
+
+  // 変動金利見直し制御
+  let currentMonthlyPayment = monthly;
+  let currentBonusPayment = bonus;
+  let unpaidInterestM = 0;
+  let unpaidInterestB = 0;
+  let peakMonthlyPayment = monthly;
 
   const schedule: PlanYear[] = [
     {
@@ -249,10 +313,70 @@ export function simulatePlan(form: FormState): PlanResult {
     let yearRepayment = 0;
 
     for (let m = 0; m < 12; m++) {
-      // 月々返済分
+      const elapsedMonths = (y - 1) * 12 + m;
+      const currentRate = isRent ? 0 : getRatePctAt(elapsedMonths);
+      const rM_current = currentRate / 100 / 12;
+      const rB_current = currentRate / 100 / 2;
+
+      // 見直し
+      if (!isRent && interestType !== 'fixed' && elapsedMonths > 0) {
+        if (paymentFixedYears > 0) {
+          // 5年ごと（60ヶ月ごと）
+          if (elapsedMonths % (paymentFixedYears * 12) === 0) {
+            const remainingMonths = (years * 12) - elapsedMonths;
+            if (remainingMonths > 0) {
+              if (balM > 0) {
+                const rawNewMonthly = annuity(balM + unpaidInterestM, rM_current, remainingMonths);
+                const capRatio = paymentCapRatio > 0 ? paymentCapRatio : 1.25;
+                currentMonthlyPayment = Math.min(rawNewMonthly, currentMonthlyPayment * capRatio);
+              }
+            }
+          }
+          // ボーナス（5年＝10回)
+          if (elapsedMonths % (paymentFixedYears * 12) === 0) {
+            const remainingBonuses = (years * 2) - Math.round(elapsedMonths / 6);
+            if (remainingBonuses > 0 && balB > 0) {
+              const rawNewBonus = annuity(balB + unpaidInterestB, rB_current, remainingBonuses);
+              const capRatio = paymentCapRatio > 0 ? paymentCapRatio : 1.25;
+              currentBonusPayment = Math.min(rawNewBonus, currentBonusPayment * capRatio);
+            }
+          }
+        } else {
+          // 変動で5年ルール無効時は reviewMonths ごとにリセット
+          if (elapsedMonths % reviewMonths === 0) {
+            const remainingMonths = (years * 12) - elapsedMonths;
+            if (remainingMonths > 0) {
+              if (balM > 0) {
+                const rawNewMonthly = annuity(balM + unpaidInterestM, rM_current, remainingMonths);
+                currentMonthlyPayment = rawNewMonthly;
+              }
+            }
+          }
+          if (elapsedMonths % reviewMonths === 0) {
+            const remainingBonuses = (years * 2) - Math.round(elapsedMonths / 6);
+            if (remainingBonuses > 0 && balB > 0) {
+              const rawNewBonus = annuity(balB + unpaidInterestB, rB_current, remainingBonuses);
+              currentBonusPayment = rawNewBonus;
+            }
+          }
+        }
+      }
+
+      // 月々返済
       if (balM > 0) {
-        const interest = balM * rM;
-        let principalPart = monthly - interest;
+        if (currentMonthlyPayment > peakMonthlyPayment) {
+          peakMonthlyPayment = currentMonthlyPayment;
+        }
+        const interest = balM * rM_current;
+        let principalPart = currentMonthlyPayment - interest;
+        if (principalPart < 0) {
+          unpaidInterestM += -principalPart;
+          principalPart = 0;
+        } else {
+          const toUnpaid = Math.min(principalPart, unpaidInterestM);
+          unpaidInterestM -= toUnpaid;
+          principalPart -= toUnpaid;
+        }
         if (principalPart > balM) principalPart = balM;
         balM -= principalPart;
         if (balM < 0.5) balM = 0;
@@ -260,10 +384,19 @@ export function simulatePlan(form: FormState): PlanResult {
         yearInterest += interest;
         yearRepayment += principalPart + interest;
       }
-      // ボーナス返済分（6月・12月相当）
+
+      // ボーナス返済（6月・12月相当）
       if ((m === 5 || m === 11) && balB > 0) {
-        const interest = balB * rB;
-        let principalPart = bonus - interest;
+        const interest = balB * rB_current;
+        let principalPart = currentBonusPayment - interest;
+        if (principalPart < 0) {
+          unpaidInterestB += -principalPart;
+          principalPart = 0;
+        } else {
+          const toUnpaid = Math.min(principalPart, unpaidInterestB);
+          unpaidInterestB -= toUnpaid;
+          principalPart -= toUnpaid;
+        }
         if (principalPart > balB) principalPart = balB;
         balB -= principalPart;
         if (balB < 0.5) balB = 0;
@@ -275,8 +408,6 @@ export function simulatePlan(form: FormState): PlanResult {
     totalInterest += yearInterest;
 
     // 家計：収入は incomes から年齢ごとに算出。
-    // 本人・配偶者の額面給与はそれぞれ合算して手取り換算、
-    // 年金・退職金・その他（手取り）はそのまま加算する。
     const income = annualIncomeAt(form.incomes, age);
     const rentAnnual = isRent ? form.rentMan * 12 * 10000 : 0;
     const renewalFee =
@@ -309,14 +440,25 @@ export function simulatePlan(form: FormState): PlanResult {
         savings -= saveup;
       }
       if (pot >= form.prepayTriggerMan * 10000 && pot > 0) {
-        const actual = Math.min(pot, totalBalance);
+        const actual = Math.min(pot, totalBalance + unpaidInterestM + unpaidInterestB);
         let remaining = actual;
-        const fromM = Math.min(remaining, balM);
-        balM -= fromM;
-        remaining -= fromM;
+        // まず未払い利息に充当
+        const toUnpaidM = Math.min(remaining, unpaidInterestM);
+        unpaidInterestM -= toUnpaidM;
+        remaining -= toUnpaidM;
+        const toUnpaidB = Math.min(remaining, unpaidInterestB);
+        unpaidInterestB -= toUnpaidB;
+        remaining -= toUnpaidB;
+
+        // 残りを元本に充当
         if (remaining > 0) {
-          const fromB = Math.min(remaining, balB);
-          balB -= fromB;
+          const fromM = Math.min(remaining, balM);
+          balM -= fromM;
+          remaining -= fromM;
+          if (remaining > 0) {
+            const fromB = Math.min(remaining, balB);
+            balB -= fromB;
+          }
         }
         if (balM < 0.5) balM = 0;
         if (balB < 0.5) balB = 0;
@@ -325,7 +467,7 @@ export function simulatePlan(form: FormState): PlanResult {
       }
     }
 
-    const loanBalance = Math.max(balM + balB, 0);
+    const loanBalance = Math.max(balM + balB + unpaidInterestM + unpaidInterestB, 0);
     if (!payoffFound && loanBalance <= 0) {
       payoffYears = y;
       payoffFound = true;
@@ -371,6 +513,7 @@ export function simulatePlan(form: FormState): PlanResult {
     payoffYears,
     repaymentBurdenPct,
     maxSavings: Math.max(...schedule.map((s) => s.savings), 0),
+    maxMonthlyPayment: isRent ? form.rentMan * 10000 : peakMonthlyPayment,
     schedule,
   };
 }

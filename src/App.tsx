@@ -206,6 +206,7 @@ function App() {
   const [mobileView, setMobileView] = useState<'input' | 'result'>('input')
   const [screen, setScreen] = useState<AppScreen>('lifeplan')
   const [rateState, setRateState] = useState<RateSimState>(loadRateState)
+  const [summaryExpanded, setSummaryExpanded] = useState(true)
 
   useEffect(() => {
     savePlans(plansState)
@@ -215,9 +216,80 @@ function App() {
     saveRateState(rateState)
   }, [rateState])
 
+  const handleApplyProductToPlan = (productId: string, planId: string) => {
+    setPlansState((prev) => ({
+      ...prev,
+      plans: prev.plans.map((p) => {
+        if (p.id === planId) {
+          return {
+            ...p,
+            form: {
+              ...p.form,
+              interestType: 'product',
+              selectedProductId: productId,
+              loanAmountMan: rateState.input.loanAmountMan,
+              years: rateState.input.years,
+              age: rateState.input.age,
+            },
+          };
+        }
+        return p;
+      }),
+      activeId: planId,
+    }));
+    setScreen('lifeplan');
+  };
+
+  const handleApplyScenarioToPlan = (planId: string) => {
+    setPlansState((prev) => ({
+      ...prev,
+      plans: prev.plans.map((p) => {
+        if (p.id === planId) {
+          return {
+            ...p,
+            form: {
+              ...p.form,
+              interestType: 'variable',
+              loanAmountMan: rateState.input.loanAmountMan,
+              years: rateState.input.years,
+              age: rateState.input.age,
+            },
+          };
+        }
+        return p;
+      }),
+      activeId: planId,
+    }));
+    setScreen('lifeplan');
+  };
+
   const { plans, activeId, common } = plansState
   const activePlan = plans.find((p) => p.id === activeId) ?? plans[0]
   const form = activePlan?.form ?? DEFAULT_FORM
+
+  // ライフプランの入力（金額や期間）を金利シミュレータ側へ全自動でリアルタイムに引き継ぐ
+  useEffect(() => {
+    if (form) {
+      setRateState((prev) => {
+        if (
+          prev.input.loanAmountMan === form.loanAmountMan &&
+          prev.input.years === form.years &&
+          prev.input.age === form.age
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          input: {
+            ...prev.input,
+            loanAmountMan: form.loanAmountMan,
+            years: form.years,
+            age: form.age,
+          },
+        };
+      });
+    }
+  }, [form.loanAmountMan, form.years, form.age]);
 
   const update = (patch: Partial<FormState>) =>
     setPlansState((prev) =>
@@ -728,8 +800,8 @@ function App() {
     screen === 'rate' ? importScenario(file) : importJson(file)
 
   const result = useMemo(
-    () => simulatePlan(mergeCommonForm(form, common)),
-    [form, common],
+    () => simulatePlan(mergeCommonForm(form, common), rateState),
+    [form, common, rateState],
   )
 
   // 共通＋専用を合成して入力欄に渡す（共通項目は📌で識別）
@@ -754,7 +826,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
             <h1 className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -825,6 +897,9 @@ function App() {
           theme={theme}
           onExportScenario={exportScenario}
           onImportScenario={importScenario}
+          plansState={plansState}
+          onApplyProductToPlan={handleApplyProductToPlan}
+          onApplyScenarioToPlan={handleApplyScenarioToPlan}
         />
       )}
 
@@ -864,7 +939,7 @@ function App() {
           <ComparePanel plans={plans} common={common} theme={theme} />
         ) : (
           <>
-          <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60 lg:hidden">
+          <div className="sticky top-[53px] z-30 mb-4 flex gap-1 rounded-xl bg-white/95 backdrop-blur-md shadow-sm p-1 dark:bg-slate-900/95 border border-slate-200/50 dark:border-slate-800/50 lg:hidden">
             {(
               [
                 ['input', '入力'],
@@ -915,6 +990,8 @@ function App() {
             onUpdateIncome={updateIncome}
             onToggleCommonIncome={toggleCommonIncome}
             commonIds={commonIds}
+            rateState={rateState}
+            onNavigateScreen={setScreen}
           />
         </div>
         <div
@@ -979,170 +1056,262 @@ function App() {
         </p>
       </footer>
 
-      {/* スクロール追従の結果サマリー */}
-      <div className="fixed inset-x-0 bottom-3 z-20 px-3">
-        <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 px-3 py-1.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-          {plans.length > 1 ? (
-            <div className="mb-0.5 flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => goPlan(-1)}
-                disabled={plans.findIndex((p) => p.id === activeId) <= 0}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
-                aria-label="前のプラン"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
-              </button>
-              <p className="truncate text-center text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                {activePlan?.name}
+      {/* スクロール追従の結果サマリー（背面にある他のインプットの操作を遮蔽しないよう pointer-events-none 指定） */}
+      <div className="fixed inset-x-0 bottom-3 z-20 px-3 pointer-events-none">
+        <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 transition-all duration-300 pointer-events-auto">
+          
+          {/* サマリーヘッダー (展開トグルとプラン切り替え) */}
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-dashed border-slate-100 dark:border-slate-800">
+            {plans.length > 1 ? (
+              <div className="flex items-center justify-center gap-2 flex-1">
+                <button
+                  type="button"
+                  onClick={() => goPlan(-1)}
+                  disabled={plans.findIndex((p) => p.id === activeId) <= 0}
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-slate-450 hover:bg-slate-100 transition disabled:opacity-20 dark:hover:bg-slate-800"
+                  aria-label="前のプラン"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-3 w-3" aria-hidden>
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                </button>
+                <p className="truncate text-center text-xs font-bold text-indigo-650 dark:text-indigo-400">
+                  {activePlan?.name} の分析サマリー
+                </p>
+                <button
+                  type="button"
+                  onClick={() => goPlan(1)}
+                  disabled={plans.findIndex((p) => p.id === activeId) >= plans.length - 1}
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-slate-450 hover:bg-slate-100 transition disabled:opacity-20 dark:hover:bg-slate-800"
+                  aria-label="次のプラン"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="h-3 w-3" aria-hidden>
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <p className="truncate text-xs font-bold text-indigo-650 dark:text-indigo-400 flex-1 pl-1">
+                {activePlan?.name} の分析サマリー
               </p>
-              <button
-                type="button"
-                onClick={() => goPlan(1)}
-                disabled={plans.findIndex((p) => p.id === activeId) >= plans.length - 1}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
-                aria-label="次のプラン"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden>
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <p className="mb-0.5 truncate text-center text-[10px] font-medium text-slate-400 dark:text-slate-500">
-              {activePlan?.name}
-            </p>
-          )}
-          {firstNegativeSaving && (
-            <div className="mb-1 flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
+            )}
+            
+            <button
+              type="button"
+              onClick={() => setSummaryExpanded(!summaryExpanded)}
+              className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:text-slate-650 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition"
+              aria-label={summaryExpanded ? "サマリーを閉じる" : "サマリーを開く"}
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-3.5 w-3.5 shrink-0"
-                aria-hidden="true"
+                className={`h-4 w-4 transition-transform duration-300 ${summaryExpanded ? '' : 'rotate-180'}`}
               >
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <path d="M12 9v4M12 17h.01" />
+                <path d="M19 9l-7 7-7-7" />
               </svg>
-              {firstNegativeSaving.age}歳ごろ貯蓄がマイナスになります
+            </button>
+          </div>
+
+          {summaryExpanded ? (
+            <>
+              {firstNegativeSaving && (
+                <div className="mb-2 flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600 dark:bg-rose-950/50 dark:text-rose-300">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <path d="M12 9v4M12 17h.01" />
+                  </svg>
+                  {firstNegativeSaving.age}歳ごろ貯蓄がマイナスになります
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <path d="M16 2v4M8 2v4M3 10h18" />
+                    </svg>
+                  </span>
+                  <div className="leading-tight">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                      {result.housingType === 'rent' ? '住居' : '完済'}
+                    </p>
+                    {result.housingType === 'rent' ? (
+                      <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                        賃貸
+                      </p>
+                    ) : (
+                      <p className="text-sm font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                        {result.payoffAge}
+                        <span className="text-[10px] font-medium">歳</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 3v18h18" />
+                      <path d="M7 13l3-3 3 2 5-6" />
+                    </svg>
+                  </span>
+                  <div className="leading-tight">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                      {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment ? '負担率（当初）' : '負担率'}
+                    </p>
+                    <p className={`text-sm font-bold tabular-nums ${burdenColor}`}>
+                      {result.repaymentBurdenPct.toFixed(0)}%
+                    </p>
+                    {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (() => {
+                      const netAnnualNow = result.repaymentBurdenPct > 0 
+                        ? result.annualRepayment / (result.repaymentBurdenPct / 100) 
+                        : 0;
+                      const maxAnnualRepayment = result.maxMonthlyPayment * 12 + result.bonusPayment * 2;
+                      const maxBurdenPct = netAnnualNow > 0 ? (maxAnnualRepayment / netAnnualNow) * 100 : result.repaymentBurdenPct;
+                      const maxToneColor =
+                        maxBurdenPct < 25
+                          ? 'text-emerald-500 dark:text-emerald-400'
+                          : maxBurdenPct < 35
+                            ? 'text-amber-500 dark:text-amber-400'
+                            : 'text-rose-500 dark:text-rose-450';
+                      return (
+                        <p className={`text-[8px] font-bold leading-none mt-0.5 whitespace-nowrap ${maxToneColor}`}>
+                          最大: {maxBurdenPct.toFixed(0)}%
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M9 9l3 4 3-4M9.5 13.5h5M9.5 16h5M12 13v4" />
+                    </svg>
+                  </span>
+                  <div className="leading-tight">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                      {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment ? '毎月（当初）' : '毎月'}
+                    </p>
+                    <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
+                      <span className="text-[10px] font-medium">円</span>
+                    </p>
+                    {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (
+                      <p className="text-[8px] text-rose-500 dark:text-rose-450 font-bold leading-none mt-0.5 whitespace-nowrap">
+                        最大: {formatYen(result.maxMonthlyPayment)}円
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M4 17l6-6 4 4 6-7" />
+                      <path d="M4 21h16" />
+                    </svg>
+                  </span>
+                  <div className="leading-tight">
+                    <p className="text-[9px] text-slate-400 dark:text-slate-500">
+                      貯金ピーク
+                    </p>
+                    <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {formatManLabel(Math.round(result.maxSavings / 10000))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* 折りたためているときのクイック数値サマリー (1行でコンパクトに表示) */
+            <div className="flex justify-around text-xs font-semibold text-slate-700 dark:text-slate-350">
+              <div>
+                <span>完済/住居: </span>
+                <span className="text-indigo-650 dark:text-indigo-400 font-bold">
+                  {result.housingType === 'rent' ? '賃貸' : `${result.payoffAge}歳`}
+                </span>
+              </div>
+              <div className="h-4 border-l border-slate-200 dark:border-slate-800" />
+              <div>
+                <span>負担率: </span>
+                <span className={`${burdenColor} font-bold`}>
+                  {result.repaymentBurdenPct.toFixed(0)}%
+                  {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (() => {
+                    const netAnnualNow = result.repaymentBurdenPct > 0 
+                      ? result.annualRepayment / (result.repaymentBurdenPct / 100) 
+                      : 0;
+                    const maxAnnualRepayment = result.maxMonthlyPayment * 12 + result.bonusPayment * 2;
+                    const maxBurdenPct = netAnnualNow > 0 ? (maxAnnualRepayment / netAnnualNow) * 100 : result.repaymentBurdenPct;
+                    return (
+                      <span className="text-[10px] text-rose-500 font-bold ml-1">
+                        (最大 {maxBurdenPct.toFixed(0)}%)
+                      </span>
+                    );
+                  })()}
+                </span>
+              </div>
+              <div className="h-4 border-l border-slate-200 dark:border-slate-800" />
+              <div>
+                <span>毎月: </span>
+                <span className="text-slate-900 dark:text-white font-bold">
+                  {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}円
+                  {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (
+                    <span className="text-[10px] text-rose-500 font-bold ml-1">
+                      (最大 {Math.round(result.maxMonthlyPayment / 10000).toFixed(1)}万)
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
           )}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            <div className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <path d="M16 2v4M8 2v4M3 10h18" />
-                </svg>
-              </span>
-              <div className="leading-tight">
-                <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  {result.housingType === 'rent' ? '住居' : '完済'}
-                </p>
-                {result.housingType === 'rent' ? (
-                  <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                    賃貸
-                  </p>
-                ) : (
-                  <p className="text-sm font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
-                    {result.payoffAge}
-                    <span className="text-[10px] font-medium">歳</span>
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <path d="M3 3v18h18" />
-                  <path d="M7 13l3-3 3 2 5-6" />
-                </svg>
-              </span>
-              <div className="leading-tight">
-                <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  負担率
-                </p>
-                <p className={`text-sm font-bold tabular-nums ${burdenColor}`}>
-                  {result.repaymentBurdenPct.toFixed(0)}%
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M9 9l3 4 3-4M9.5 13.5h5M9.5 16h5M12 13v4" />
-                </svg>
-              </span>
-              <div className="leading-tight">
-                <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  毎月
-                </p>
-                <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                  {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
-                  <span className="text-[10px] font-medium">円</span>
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-3.5 w-3.5"
-                  aria-hidden="true"
-                >
-                  <path d="M4 17l6-6 4 4 6-7" />
-                  <path d="M4 21h16" />
-                </svg>
-              </span>
-              <div className="leading-tight">
-                <p className="text-[9px] text-slate-400 dark:text-slate-500">
-                  貯金ピーク
-                </p>
-                <p className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                  {formatManLabel(Math.round(result.maxSavings / 10000))}
-                </p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
         </>

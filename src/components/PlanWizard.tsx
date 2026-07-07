@@ -201,6 +201,19 @@ function buildFormFromWizard(input: WizardInput): FormState {
   };
 }
 
+function getLivingCostPresets(hasSpouse: boolean, childCount: number): { modest: number; standard: number; luxury: number } {
+  if (!hasSpouse && childCount === 0) {
+    return { modest: 11, standard: 14, luxury: 18 };
+  }
+  if (hasSpouse && childCount === 0) {
+    return { modest: 15, standard: 18, luxury: 22 };
+  }
+  if (childCount <= 2) {
+    return { modest: 16, standard: 20, luxury: 25 };
+  }
+  return { modest: 18, standard: 22, luxury: 28 };
+}
+
 interface PlanWizardProps {
   onCreate: (form: FormState) => void;
   onClose: () => void;
@@ -222,13 +235,24 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
   const [bonusMonths, setBonusMonths] = useState('4');
   const [hasSpouse, setHasSpouse] = useState(false);
   const [spouseIncomeMan, setSpouseIncomeMan] = useState('300');
-  const [livingCostMan, setLivingCostMan] = useState(18);
-  const [children, setChildren] = useState<{ born: boolean; value: string }[]>(
-    [],
-  );
+  const [children, setChildren] = useState<{ born: boolean; value: string }[]>([]);
+  const [livingCostLevel, setLivingCostLevel] = useState<'modest' | 'standard' | 'luxury' | 'custom'>('standard');
+  const [customLivingCostMan, setCustomLivingCostMan] = useState('14');
   const [hasCar, setHasCar] = useState(true);
   const [carCount, setCarCount] = useState(1);
   const [savings, setSavings] = useState('300');
+
+  const currentPresets = getLivingCostPresets(hasSpouse, children.length);
+
+  // 依存ステートが変わるたびに自動で目安金額をアップデートする効果
+  const lastStateKey = `${hasSpouse}-${children.length}-${livingCostLevel}`;
+  const [lastTrackedKey, setLastStateKey] = useState(lastStateKey);
+  if (lastTrackedKey !== lastStateKey) {
+    setLastStateKey(lastStateKey);
+    if (livingCostLevel !== 'custom') {
+      setCustomLivingCostMan(String(currentPresets[livingCostLevel]));
+    }
+  }
 
   const setCount = (n: number) => {
     const next = Math.max(0, Math.min(5, n));
@@ -254,7 +278,7 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
         bonusMonths: Number(bonusMonths) || 0,
         hasSpouse,
         spouseIncomeMan: hasSpouse ? Number(spouseIncomeMan) || 0 : 0,
-        livingCostMan,
+        livingCostMan: Number(customLivingCostMan) || 14,
         childBirthOffsets: children.map((c) => {
           const v = Number(c.value) || 0;
           return c.born ? -v : v;
@@ -437,29 +461,49 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
 
           {/* 生活費 */}
           <div>
-            <p className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              生活費（月・教育費を除く）
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                生活費（月・教育費を除く）
+              </p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  value={customLivingCostMan}
+                  min={1}
+                  max={100}
+                  onChange={(e) => {
+                    setCustomLivingCostMan(e.target.value);
+                    setLivingCostLevel('custom');
+                  }}
+                  className={numInput}
+                  aria-label="生活費の直接変更"
+                />
+                <span className="text-xs text-slate-400 font-medium">万円/月</span>
+              </div>
+            </div>
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
               {(
                 [
-                  [15, 'ひかえめ'],
-                  [18, '標準'],
-                  [22, 'ゆとり'],
+                  ['modest', 'ひかえめ', currentPresets.modest],
+                  ['standard', '標準', currentPresets.standard],
+                  ['luxury', 'ゆとり', currentPresets.luxury],
                 ] as const
-              ).map(([v, label]) => (
+              ).map(([level, label, amount]) => (
                 <button
-                  key={v}
+                  key={level}
                   type="button"
-                  onClick={() => setLivingCostMan(v)}
+                  onClick={() => {
+                    setLivingCostLevel(level);
+                    setCustomLivingCostMan(String(amount));
+                  }}
                   className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${
-                    livingCostMan === v
+                    livingCostLevel === level
                       ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
                       : 'text-slate-500 dark:text-slate-400'
                   }`}
                 >
                   {label}
-                  <span className="ml-1 text-[10px] font-normal">{v}万</span>
+                  <span className="ml-1 text-[10px] font-normal">{amount}万</span>
                 </button>
               ))}
             </div>

@@ -12,7 +12,7 @@ import type { PlanYear } from '../lib/plan';
 import type { Theme } from '../hooks/useTheme';
 import type { LifeEvent } from '../types';
 import { groupEventsByAge, type EventMarker } from '../lib/events';
-import { formatManLabel } from '../lib/format';
+import { formatManLabel, formatChartManYAxis } from '../lib/format';
 
 interface SavingsChartProps {
   data: PlanYear[];
@@ -119,11 +119,11 @@ export function SavingsChart({ data, theme, events, payoffAge }: SavingsChartPro
             minTickGap={24}
           />
           <YAxis
-            width={44}
+            width={60}
             tick={{ fill: axisColor, fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => v.toLocaleString('ja-JP')}
+            tickFormatter={formatChartManYAxis}
           />
           <Tooltip content={<SavingsTooltip markers={markers} />} />
           <ReferenceLine y={0} stroke="#f43f5e" strokeDasharray="4 2" />

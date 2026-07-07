@@ -23,3 +23,27 @@ export function formatJpyCompact(value: number): string {
 export function formatManLabel(man: number): string {
   return `${(man ?? 0).toLocaleString('ja-JP')}万円`;
 }
+
+/**
+ * 万円単位の数値をグラフのY軸目盛り用にコンパクトな日本語にフォーマットする。
+ * 例: 50 -> "50万", 1000 -> "1,000万", 10000 -> "1億", 15000 -> "1.5億"
+ */
+export function formatChartManYAxis(man: number): string {
+  if (man === 0) return '0';
+  const isNegative = man < 0;
+  const absValue = Math.abs(man);
+  let label = '';
+  
+  if (absValue >= 10000) {
+    const oku = absValue / 10000;
+    if (Math.round(oku * 10) % 10 === 0) {
+      label = `${Math.round(oku)}億`;
+    } else {
+      label = `${oku.toFixed(1)}億`;
+    }
+  } else {
+    label = `${absValue.toLocaleString('ja-JP')}万`;
+  }
+  
+  return isNegative ? `-${label}` : label;
+}

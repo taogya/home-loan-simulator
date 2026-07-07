@@ -32,6 +32,9 @@ interface RateSimulatorScreenProps {
   theme: Theme;
   onExportScenario: () => void;
   onImportScenario: (file: File) => void;
+  plansState?: any;
+  onApplyProductToPlan?: (productId: string, planId: string) => void;
+  onApplyScenarioToPlan?: (planId: string) => void;
 }
 
 /** 種類ごとの新規商品の既定値。 */
@@ -47,6 +50,9 @@ export function RateSimulatorScreen({
   theme,
   onExportScenario,
   onImportScenario,
+  plansState,
+  onApplyProductToPlan,
+  onApplyScenarioToPlan,
 }: RateSimulatorScreenProps) {
   const [subTab, setSubTab] = useState<SubTabId>('compare');
 
@@ -116,7 +122,7 @@ export function RateSimulatorScreen({
               onSelectTemplate={selectTemplate}
             />
           </div>
-          <div className="min-w-0 lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2 lg:sticky lg:top-20 lg:self-start lg:block space-y-6">
             {subTab === 'compare' ? (
               <RateComparePanel
                 input={state.input}
@@ -125,6 +131,8 @@ export function RateSimulatorScreen({
                 onChangeProduct={changeProduct}
                 onAddProduct={addProduct}
                 onRemoveProduct={removeProduct}
+                plansState={plansState}
+                onApplyProductToPlan={onApplyProductToPlan}
               />
             ) : (
               <RateScenarioPanel
@@ -136,6 +144,8 @@ export function RateSimulatorScreen({
                 onLoadRising={loadRising}
                 onExport={onExportScenario}
                 onImport={onImportScenario}
+                plansState={plansState}
+                onApplyScenarioToPlan={onApplyScenarioToPlan}
               />
             )}
           </div>

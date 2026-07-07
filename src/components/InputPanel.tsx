@@ -205,6 +205,8 @@ interface InputPanelProps {
   onSetCommonExpenses: (ids: string[], toCommon: boolean) => void;
   onSetCommonEvents: (ids: string[], toCommon: boolean) => void;
   commonIds: Set<string>;
+  rateState?: any;
+  onNavigateScreen?: (screen: 'lifeplan' | 'rate') => void;
 }
 
 function PinIcon({ filled }: { filled: boolean }) {
@@ -373,6 +375,8 @@ export function InputPanel({
   onSetCommonExpenses,
   onSetCommonEvents,
   commonIds,
+  rateState,
+  onNavigateScreen,
 }: InputPanelProps) {
   const [open, setOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -839,16 +843,111 @@ export function InputPanel({
             format={formatManLabel}
             hint="物件価格から頭金を引いた額"
           />
-          <NumberSlider
-            label="金利（年）"
-            value={value.ratePct}
-            min={0}
-            max={5}
-            step={0.05}
-            onChange={(v) => onChange({ ratePct: v })}
-            format={(v) => `${v.toFixed(2)}%`}
-            hint="固定は変動より高め。金融機関によって異なります"
-          />
+          
+          <div className="space-y-1.5 pt-2">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400">金利の計算基準</label>
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800/60 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              {(
+                [
+                  { id: 'fixed', label: '手入力' },
+                  { id: 'variable', label: '金利シナリオ' },
+                  { id: 'product', label: '登録商品' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onChange({ interestType: opt.id })}
+                  className={`flex-1 rounded-lg py-1 px-1 transition duration-150 ${
+                    (value.interestType ?? 'fixed') === opt.id
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                      : 'hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {(value.interestType ?? 'fixed') === 'fixed' && (
+            <NumberSlider
+              label="金利（年）"
+              value={value.ratePct}
+              min={0}
+              max={5}
+              step={0.05}
+              onChange={(v) => onChange({ ratePct: v })}
+              format={(v) => `${v.toFixed(2)}%`}
+              hint="固定は変動より高め。金融機関によって異なります"
+            />
+          )}
+
+          {value.interestType === 'variable' && (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 text-xs text-indigo-800 dark:border-indigo-950/50 dark:bg-indigo-950/15 dark:text-indigo-300 space-y-2">
+              <p className="font-bold flex items-center gap-1 mb-1">
+                <span className="text-sm">📈</span> 金利シナリオを適用中
+              </p>
+              <p className="leading-normal">
+                金利シミュレータ画面の<strong>「金利シナリオ」</strong>(現在は当初 {rateState?.scenario?.points[0]?.ratePct.toFixed(2) ?? '0.50'}%) に従って、将来の利上げ・返済額見直し (5年125%ルール等) を自動的に反映して計算します。
+              </p>
+              {onNavigateScreen && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateScreen('rate')}
+                  className="w-full rounded-lg bg-indigo-600/10 border border-indigo-200 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white cursor-pointer inline-flex items-center justify-center gap-1 dark:bg-indigo-950/40 dark:border-indigo-800/80 dark:text-indigo-400 dark:hover:bg-indigo-600 dark:hover:text-white"
+                >
+                  <span>📈 金利シナリオを編集する</span>
+                  <span>➔</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {value.interestType === 'product' && (
+            <div className="space-y-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3.5 dark:border-indigo-950/50 dark:bg-indigo-950/15">
+              <label className="text-xs font-bold text-indigo-800 dark:text-indigo-300 block">🏦 適用する登録商品</label>
+              <select
+                value={value.selectedProductId ?? ''}
+                onChange={(e) => onChange({ selectedProductId: e.target.value })}
+                className="w-full rounded-lg border border-slate-205 bg-white px-2 py-1.5 text-xs font-semibold dark:border-slate-700 dark:bg-slate-950 text-slate-800 dark:text-slate-200"
+              >
+                <option value="">-- 商品を選択 --</option>
+                {rateState?.products && rateState.products.length > 0 ? (
+                  rateState.products.map((p: any) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label || (p.kind === 'variable' ? '変動金利型' : p.kind === 'wholeFixed' ? '全期間固定' : `固定${p.fixedYears}年`)}（{p.initialRatePct.toFixed(2)}%
+                      {p.kind === 'fixedPeriod' ? ` ➔ 終了後 ${p.afterRatePct?.toFixed(2)}%` : ''}）
+                    </option>
+                  ))
+                ) : (
+                  <option disabled>登録商品がありません</option>
+                )}
+              </select>
+              {(() => {
+                const p = rateState?.products?.find((x: any) => x.id === value.selectedProductId);
+                if (!p) return null;
+                return (
+                  <p className="text-[11px] leading-normal text-indigo-700 dark:text-indigo-400 border-t border-indigo-100/50 dark:border-indigo-950/50 pt-1.5 mb-1">
+                    {p.kind === 'variable' && '💡 変動金利：金利シナリオの推移に基づいて、5年据置き・125%上限・未払利息の仕組みを考慮し返済スケジュールを計算します。'}
+                    {p.kind === 'wholeFixed' && '💡 全期間固定：全期間、当初金利がそのまま適用され、将来の金利上昇リスクから完全に守られます。'}
+                    {p.kind === 'fixedPeriod' && `💡 固定${p.fixedYears}年：最初の${p.fixedYears}年は固定金利、それ以降は変動金利になり、その時点での金利シナリオの動きが適用されます。`}
+                  </p>
+                );
+              })()}
+              {onNavigateScreen && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateScreen('rate')}
+                  className="w-full rounded-lg bg-indigo-600/10 border border-indigo-200 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-600 hover:text-white cursor-pointer inline-flex items-center justify-center gap-1 dark:bg-indigo-950/40 dark:border-indigo-800/80 dark:text-indigo-400 dark:hover:bg-indigo-600 dark:hover:text-white"
+                >
+                  <span>🏦 金利商品を編集・比較する</span>
+                  <span>➔</span>
+                </button>
+              )}
+            </div>
+          )}
+
           <NumberSlider
             label="返済期間"
             value={value.years}
@@ -1240,27 +1339,27 @@ export function InputPanel({
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800 mt-4">
                   <button
                     type="button"
                     onClick={handleSubmitIncome}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+                    className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md shadow-indigo-600/10 transition hover:bg-indigo-700 active:bg-indigo-800 cursor-pointer text-center"
                   >
-                    {incEditingId ? '更新' : '追加'}
+                    {incEditingId ? '変更を保存する' : 'この内容で追加する'}
                   </button>
                   <button
                     type="button"
                     onClick={closeIncSheet}
-                    className="rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                    className="flex-1 rounded-xl border border-slate-205 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition dark:border-slate-700 dark:bg-slate-850 dark:text-slate-350 dark:hover:bg-slate-800 cursor-pointer text-center"
                   >
                     キャンセル
                   </button>
-                  {incError && (
-                    <p className="text-xs font-medium text-rose-500">
-                      名前を入力してください
-                    </p>
-                  )}
                 </div>
+                {incError && (
+                  <p className="text-xs font-bold text-rose-500 mt-1.5 text-center">
+                    ⚠️ 名前（項目名）を入力してください
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1471,27 +1570,27 @@ export function InputPanel({
                   options={expenseGroupOptions}
                 />
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800 mt-4">
                   <button
                     type="button"
                     onClick={handleSubmitExpense}
-                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+                    className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md shadow-indigo-600/10 transition hover:bg-indigo-700 active:bg-indigo-800 cursor-pointer text-center"
                   >
-                    {expEditingId ? '更新' : '追加'}
+                    {expEditingId ? '変更を保存する' : 'この内容で追加する'}
                   </button>
                   <button
                     type="button"
                     onClick={closeExpSheet}
-                    className="rounded-lg px-2 py-1.5 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
+                    className="flex-1 rounded-xl border border-slate-205 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition dark:border-slate-700 dark:bg-slate-850 dark:text-slate-350 dark:hover:bg-slate-800 cursor-pointer text-center"
                   >
                     キャンセル
                   </button>
-                  {expError && (
-                    <p className="text-xs font-medium text-rose-500">
-                      名前を入力してください
-                    </p>
-                  )}
                 </div>
+                {expError && (
+                  <p className="text-xs font-bold text-rose-500 mt-1.5 text-center">
+                    ⚠️ 名前（項目名）を入力してください
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1776,23 +1875,25 @@ export function InputPanel({
                 options={existingGroups(events)}
               />
             </div>
-            <button
-              type="button"
-              onClick={handleSubmitEvent}
-              className="rounded-lg bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-indigo-700"
-            >
-              {editingId ? '更新' : '追加'}
-            </button>
-            <button
-              type="button"
-              onClick={closeEvSheet}
-              className="rounded-lg px-2 py-1 text-sm text-slate-400 transition hover:text-slate-600 dark:hover:text-slate-200"
-            >
-              キャンセル
-            </button>
+            <div className="flex w-full items-center gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800 mt-4">
+              <button
+                type="button"
+                onClick={handleSubmitEvent}
+                className="flex-1 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white shadow-md shadow-indigo-600/10 transition hover:bg-indigo-700 active:bg-indigo-800 cursor-pointer text-center"
+              >
+                {editingId ? '変更を保存する' : 'この内容で追加する'}
+              </button>
+              <button
+                type="button"
+                onClick={closeEvSheet}
+                className="flex-1 rounded-xl border border-slate-205 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition dark:border-slate-700 dark:bg-slate-850 dark:text-slate-350 dark:hover:bg-slate-800 cursor-pointer text-center"
+              >
+                キャンセル
+              </button>
+            </div>
             {evError && (
-              <p className="w-full text-xs font-medium text-rose-500">
-                イベント名を入力してください
+              <p className="w-full text-xs font-bold text-rose-500 mt-1.5 text-center">
+                ⚠️ イベント名を入力してください
               </p>
             )}
               </div>

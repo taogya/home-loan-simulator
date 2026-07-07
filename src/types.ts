@@ -83,6 +83,10 @@ export interface FormState {
   years: number;
   /** 借入開始時の年齢（歳） */
   age: number;
+  /** 金率変更タイプ：'fixed'＝固定、'variable'＝シナリオ連動、'product'＝商品連動 */
+  interestType?: 'fixed' | 'variable' | 'product';
+  /** 金利シミュレータの商品ID（interestType === 'product' のとき） */
+  selectedProductId?: string;
 
   // 賃貸条件（housingType==='rent' のとき使用）
   /** 家賃（万円/月） */
@@ -175,6 +179,8 @@ export const DEFAULT_FORM: FormState = {
   prepaySaveupPerYearMan: 20,
   prepayTriggerMan: 100,
   events: [],
+  interestType: 'fixed',
+  selectedProductId: '',
 };
 
 export interface Plan {

@@ -62,7 +62,7 @@ export function StatHighlight({ result }: StatHighlightProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="card p-3">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {isRent ? '更新料' : '毎月の返済'}
+            {isRent ? '更新料' : `毎月の返済${!isRent && result.maxMonthlyPayment > result.monthlyPayment ? '（当初）' : ''}`}
           </p>
           <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900 dark:text-white">
             {formatYen(isRent ? result.renewalFee : result.monthlyPayment)}
@@ -71,9 +71,11 @@ export function StatHighlight({ result }: StatHighlightProps) {
           <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
             {isRent
               ? `${result.renewalIntervalYears}年ごと`
-              : result.bonusPayment > 0
-                ? `＋ボーナス時 ${formatYen(result.bonusPayment)}円`
-                : 'ボーナス払いなし'}
+              : !isRent && result.maxMonthlyPayment > result.monthlyPayment
+                ? `📈 金利上昇時最大: ${formatYen(result.maxMonthlyPayment)}円`
+                : result.bonusPayment > 0
+                  ? `＋ボーナス時 ${formatYen(result.bonusPayment)}円`
+                  : 'ボーナス払いなし'}
           </p>
         </div>
 
@@ -95,7 +97,7 @@ export function StatHighlight({ result }: StatHighlightProps) {
 
         <div className="card p-3">
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            {isRent ? '家賃負担率' : '返済負担率'}
+            {isRent ? '家賃負担率' : `返済負担率${!isRent && result.maxMonthlyPayment > result.monthlyPayment ? '（当初）' : ''}`}
           </p>
           <p
             className={`mt-0.5 text-xl font-bold tabular-nums ${toneClasses[tone.color]}`}
@@ -104,7 +106,18 @@ export function StatHighlight({ result }: StatHighlightProps) {
             <span className="ml-0.5 text-sm font-medium">%</span>
           </p>
           <p className={`mt-1 text-xs font-medium ${toneClasses[tone.color]}`}>
-            {tone.label}
+            {isRent
+              ? tone.label
+              : !isRent && result.maxMonthlyPayment > result.monthlyPayment
+                ? (() => {
+                    const netAnnualNow = result.repaymentBurdenPct > 0 
+                      ? result.annualRepayment / (result.repaymentBurdenPct / 100) 
+                      : 0;
+                    const maxAnnualRepayment = result.maxMonthlyPayment * 12 + result.bonusPayment * 2;
+                    const maxBurdenPct = netAnnualNow > 0 ? (maxAnnualRepayment / netAnnualNow) * 100 : result.repaymentBurdenPct;
+                    return `📈 上昇時最大: ${maxBurdenPct.toFixed(0)}% (${burdenTone(maxBurdenPct).label})`;
+                  })()
+                : tone.label}
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -33,6 +33,8 @@ interface RateScenarioPanelProps {
   onLoadRising: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
+  plansState?: any;
+  onApplyScenarioToPlan?: (planId: string) => void;
 }
 
 interface StepTooltipProps {
@@ -162,8 +164,11 @@ export function RateScenarioPanel({
   onLoadRising,
   onExport,
   onImport,
+  plansState,
+  onApplyScenarioToPlan,
 }: RateScenarioPanelProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const result = useMemo(
     () => simulateRateScenario(input, scenario),
     [input, scenario],
@@ -264,6 +269,58 @@ export function RateScenarioPanel({
 
   return (
     <div className="space-y-6">
+      {/* ライフプランへの連動機能 (共通ポップオーバー統一) */}
+      {plansState && plansState.plans.length > 0 && onApplyScenarioToPlan && (
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-850 dark:bg-slate-800/40">
+          <div className="leading-tight pr-3">
+            <h4 className="text-sm font-bold text-slate-850 dark:text-slate-200 flex items-center gap-1.5">
+              <span>📈</span> 金利シナリオをライフプランに連動
+            </h4>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              設計中のお好みの金利更新スケジュールを、今すぐライフプランに適用できます。
+            </p>
+          </div>
+          
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-indigo-500 cursor-pointer inline-flex items-center gap-1"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-4 w-4 text-indigo-500">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71m-2.21 4.3a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+              <span>連動する</span>
+            </button>
+
+            {menuOpen && (
+              <>
+                {/* クリック時にメニューを閉じる背景オーバーレイ */}
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 mt-1 w-44 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 z-20">
+                  <p className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 border-b border-dashed border-slate-100 dark:border-slate-800 mb-1">
+                    連動先ライフプラン
+                  </p>
+                  {plansState.plans.map((p: any) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        onApplyScenarioToPlan(p.id);
+                        setMenuOpen(false);
+                      }}
+                      className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-750 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80 transition"
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ルールの説明 */}
       <div className="card p-5">
         <h3 className="text-base font-bold text-slate-900 dark:text-white">

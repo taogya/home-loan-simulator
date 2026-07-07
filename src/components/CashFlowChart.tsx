@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import type { PlanYear } from '../lib/plan';
 import type { Theme } from '../hooks/useTheme';
+import { formatChartManYAxis } from '../lib/format';
 
 interface CashFlowChartProps {
   data: PlanYear[];
@@ -104,11 +105,11 @@ export function CashFlowChart({ data, theme, payoffAge }: CashFlowChartProps) {
             minTickGap={24}
           />
           <YAxis
-            width={44}
+            width={60}
             tick={{ fill: axisColor, fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(v) => `${v.toLocaleString('ja-JP')}`}
+            tickFormatter={formatChartManYAxis}
           />
           <Tooltip content={<CFTooltip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
           <Legend wrapperStyle={{ fontSize: 12 }} />

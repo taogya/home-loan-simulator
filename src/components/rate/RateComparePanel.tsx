@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -28,6 +29,8 @@ interface RateComparePanelProps {
   onChangeProduct: (id: string, patch: Partial<RateProductDef>) => void;
   onAddProduct: (kind: RateKind) => void;
   onRemoveProduct: (id: string) => void;
+  plansState?: any;
+  onApplyProductToPlan?: (productId: string, planId: string) => void;
 }
 
 interface BarTooltipProps {
@@ -62,7 +65,10 @@ export function RateComparePanel({
   onChangeProduct,
   onAddProduct,
   onRemoveProduct,
+  plansState,
+  onApplyProductToPlan,
 }: RateComparePanelProps) {
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const rows = compareProducts(input, products);
   const axisColor = theme === 'dark' ? '#94a3b8' : '#64748b';
   const gridColor = theme === 'dark' ? '#1e293b' : '#e2e8f0';
@@ -276,7 +282,8 @@ export function RateComparePanel({
                 <th className="py-2 pr-3 text-right font-medium">月々返済額</th>
                 <th className="py-2 pr-3 text-right font-medium">総利息（単純）</th>
                 <th className="py-2 pr-3 text-right font-medium">総利息（移行後）</th>
-                <th className="py-2 text-right font-medium">移行後の月々</th>
+                <th className="py-2 pr-3 text-right font-medium">移行後の月々</th>
+                <th className="py-2 text-center font-medium">ライフプラン連動</th>
               </tr>
             </thead>
             <tbody>
@@ -305,10 +312,53 @@ export function RateComparePanel({
                       ? formatJpyCompact(r.totalInterestTransition)
                       : '—'}
                   </td>
-                  <td className="py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                  <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600 dark:text-slate-300">
                     {r.paymentAfterTransition != null
                       ? `${formatYen(r.paymentAfterTransition)}円`
                       : '—'}
+                  </td>
+                  <td className="py-2.5 text-center relative">
+                    {plansState && plansState.plans.length > 0 && onApplyProductToPlan ? (
+                      <div className="inline-block text-left">
+                        <button
+                          type="button"
+                          onClick={() => setActiveMenuId(activeMenuId === r.id ? null : r.id)}
+                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-700 shadow-sm transition hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400 inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-3.5 w-3.5">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71m-2.21 4.3a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                          </svg>
+                          <span>連動</span>
+                        </button>
+
+                        {activeMenuId === r.id && (
+                          <>
+                            {/* ポップオーバーの背景用透明オーバーレイ */}
+                            <div className="fixed inset-0 z-10" onClick={() => setActiveMenuId(null)} />
+                            <div className="absolute right-0 mt-1 w-44 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 z-20">
+                              <p className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 border-b border-dashed border-slate-100 dark:border-slate-800 mb-1">
+                                連動先ライフプラン
+                              </p>
+                              {plansState.plans.map((p: any) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    onApplyProductToPlan(r.id, p.id);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full text-left rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-750 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80 transition"
+                                >
+                                  {p.name}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

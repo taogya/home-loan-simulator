@@ -12,7 +12,7 @@ import type { PlanYear } from '../lib/plan';
 import type { Theme } from '../hooks/useTheme';
 import type { LifeEvent } from '../types';
 import { groupEventsByAge, type EventMarker } from '../lib/events';
-import { formatManLabel } from '../lib/format';
+import { formatManLabel, formatChartManYAxis } from '../lib/format';
 
 interface BalanceChartProps {
   schedule: PlanYear[];
@@ -63,14 +63,6 @@ function ChartTooltip({ active, payload, markers }: ChartTooltipProps) {
       )}
     </div>
   );
-}
-
-function formatYAxis(value: number): string {
-  if (value >= 10000) {
-    const oku = value / 10000;
-    return `${Number.isInteger(oku) ? oku : oku.toFixed(1)}億`;
-  }
-  return value.toLocaleString('ja-JP');
 }
 
 export function BalanceChart({ schedule, theme, events, payoffAge, isRent }: BalanceChartProps) {
@@ -130,11 +122,11 @@ export function BalanceChart({ schedule, theme, events, payoffAge, isRent }: Bal
             tickFormatter={(v) => `${v}`}
           />
           <YAxis
-            width={44}
+            width={60}
             tick={{ fill: axisColor, fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={formatYAxis}
+            tickFormatter={formatChartManYAxis}
           />
           <Tooltip content={<ChartTooltip markers={markers} />} />
           {payoffAge > startAge && payoffAge <= endAge && (
