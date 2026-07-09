@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NumberSlider } from './NumberSlider';
+import { SmartInput } from './SmartInput';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatManLabel } from '../lib/format';
 import type {
@@ -1209,14 +1210,15 @@ export function InputPanel({
                         ))}
                       </div>
                     )}
-                    <input
-                      type="number"
-                      value={incAmount}
+                    <SmartInput
+                      value={Number(incAmount) || 0}
+                      onChange={(v) => setIncAmount(String(v))}
                       min={0}
+                      max={10000}
                       step={1}
-                      onChange={(e) => setIncAmount(e.target.value)}
-                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      aria-label="金額（万円）"
+                      label="金額（万円）"
+                      format={(v) => `${v}万円`}
+                      className="w-24 text-right"
                     />
                     <span className="text-xs text-slate-400">
                       万円{incIsRetirement ? '（一度だけ）' : ''}
@@ -1258,29 +1260,31 @@ export function InputPanel({
                     受け取る期間（本人の年齢が基準）
                   </p>
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <input
-                      type="number"
-                      value={incStartAge}
+                    <SmartInput
+                      value={Number(incStartAge) || 0}
+                      onChange={(v) => setIncStartAge(String(v))}
                       min={0}
                       max={120}
-                      onChange={(e) => setIncStartAge(e.target.value)}
-                      className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-950"
-                      aria-label="開始年齢"
+                      step={1}
+                      label="開始年齢"
+                      format={(v) => `${v}歳`}
+                      className="w-16 text-right"
                     />
                     <span className="text-xs text-slate-400">
                       歳から{incIsRetirement ? 'の年に一度だけ' : ''}
                     </span>
                     {!incIsRetirement && (
                       <>
-                        <input
-                          type="number"
-                          value={incEndAge}
+                        <SmartInput
+                          value={Number(incEndAge) || 0}
+                          onChange={(v) => setIncEndAge(String(v))}
                           min={0}
                           max={120}
+                          step={1}
+                          label="終了年齢"
                           placeholder="ずっと"
-                          onChange={(e) => setIncEndAge(e.target.value)}
-                          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
-                          aria-label="終了年齢"
+                          format={(v) => v === 0 ? 'ずっと' : `${v}歳`}
+                          className="w-16 text-right"
                         />
                         <span className="text-xs text-slate-400">
                           {incEndAge.trim() ? '歳まで' : '歳まで（空＝ずっと）'}

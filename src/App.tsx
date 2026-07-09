@@ -888,6 +888,36 @@ function App() {
             </button>
           </div>
         </div>
+        
+        {/* スマホ専用インラインドッキング追従トグル：ヘッダーの一部にすることで、絶対にめり込み・隠れが起きず、いつでも親指タップ可能に */}
+        {screen === 'lifeplan' && plans.length > 0 && viewMode === 'edit' && (
+          <div className="px-4 pb-2 pt-0 lg:hidden border-t border-slate-100 dark:border-slate-900/60 mt-1">
+            <div className="flex gap-1 rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800">
+              {(
+                [
+                  ['input', '条件を入力 🎛️'],
+                  ['result', 'シミュレーション結果 📊'],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setMobileView(v)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                  }}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition ${
+                    mobileView === v
+                      ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
+                      : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </header>
 
       {screen === 'rate' && (
@@ -939,30 +969,6 @@ function App() {
           <ComparePanel plans={plans} common={common} theme={theme} />
         ) : (
           <>
-          <div className="sticky top-[53px] z-30 mb-4 flex gap-1 rounded-xl bg-white/95 backdrop-blur-md shadow-sm p-1 dark:bg-slate-900/95 border border-slate-200/50 dark:border-slate-800/50 lg:hidden">
-            {(
-              [
-                ['input', '入力'],
-                ['result', '結果'],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => {
-                  setMobileView(v)
-                  window.scrollTo({ top: 0, behavior: 'smooth' })
-                }}
-                className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  mobileView === v
-                    ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400'
-                    : 'text-slate-500 dark:text-slate-400'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
           <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
         <div
           className={`lg:col-span-1 lg:block ${

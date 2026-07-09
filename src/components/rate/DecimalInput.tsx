@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { RotaryInputModal } from '../RotaryInputModal';
 
 interface DecimalInputProps {
   value: number;
@@ -38,12 +39,26 @@ export function DecimalInput({
 }: DecimalInputProps) {
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
 
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
+  const formattedDisplay = display(value, decimals) + (suffix ?? '');
 
   return (
     <span className="inline-flex items-center gap-1">
+      {/* スマホ用：タップ選択式、キーボードは出さずに専用ダイヤルテンキーを展開 */}
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className={`lg:hidden block cursor-pointer select-none rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white transition hover:bg-slate-50 dark:hover:bg-slate-800 ${widthClass}`}
+        title="タップして調整ダイヤルを開く"
+        aria-label={`${ariaLabel}をダイヤル入力`}
+      >
+        {formattedDisplay}
+      </button>
+
+      {/* PC用：通常の手入力キーボード（従来どおり） */}
       <input
         ref={ref}
         type="text"
@@ -73,10 +88,22 @@ export function DecimalInput({
         onKeyDown={(e) => {
           if (e.key === 'Enter') ref.current?.blur();
         }}
-        className={`${widthClass} rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white`}
+        className={`${widthClass} hidden lg:block rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white`}
         aria-label={ariaLabel}
       />
       {suffix && <span className="text-xs text-slate-400">{suffix}</span>}
+
+      <RotaryInputModal
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        label={ariaLabel}
+        value={value}
+        min={min}
+        max={max}
+        step={1 / Math.pow(10, decimals)} // 小数第2位なら 0.01、第1位なら 0.1 をステップ単位にする
+        onChange={onChange}
+        format={(v) => display(v, decimals) + (suffix ?? '')}
+      />
     </span>
   );
 }
