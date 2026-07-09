@@ -17,8 +17,6 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   // 直前のポインター角度
   const prevAngleRef = useRef<number | null>(null);
   const accumulatedAngleRef = useRef<number>(0); // 45度ステップ判定用の累積角度
-  const lastTimeRef = useRef<number | null>(null);
-  const moveHistoryRef = useRef<{ time: number; dAngle: number }[]>([]);
 
   // つまみ自身の物理回転角度（境界制限なしで、何周でもぐるぐる回り続ける）
   const physicalAngleRef = useRef<number>(0);
