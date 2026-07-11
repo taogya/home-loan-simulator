@@ -667,9 +667,12 @@ function App() {
         incomes: form.incomes.filter((i) => !commonIncomeLabels.has(i.label)),
       }
 
-      // すでにこのプランが裏に wizardInput を持っている場合は、新規プランではなく「上書き再構成（編集）」として扱う
+      // 「一括条件変更（再構成）」で開かれた場合のみ、アクティブプランを上書き再構成する。
+      // 「プランを追加」など wizardInitialInput 無しで開いた場合は、常に新規プランとして追加する。
+      // （以前は activePlan.wizardInput の有無で判定しており、ウィザード経由で作った既存プランが
+      //   アクティブのときに「プランを追加」すると新規追加ではなく上書きになってしまっていた）
       const activePlan = prev.plans.find((p) => p.id === prev.activeId)
-      const isEdit = !!activePlan && !!activePlan.wizardInput
+      const isEdit = !!activePlan && !!wizardInitialInput
 
       if (isEdit && activePlan) {
         // 現在のプランの手入力カスタム項目（自動生成以外のユーザー定義項目、例えば「家族旅行」など）を抽出
@@ -1003,7 +1006,10 @@ function App() {
           plans={plans}
           activeId={activeId}
           onSelect={selectPlan}
-          onAdd={() => setWizardOpen(true)}
+          onAdd={() => {
+            setWizardInitialInput(undefined)
+            setWizardOpen(true)
+          }}
           onDuplicate={duplicatePlan}
           onRemove={removePlan}
           onRename={renamePlan}
