@@ -21,6 +21,7 @@ import { formatJpyCompact, formatYen } from '../../lib/format';
 import { PLAN_COLORS } from '../../lib/planColors';
 import { DecimalInput } from './DecimalInput';
 import type { Theme } from '../../hooks/useTheme';
+import type { Plan, PlansState } from '../../types';
 
 interface RateComparePanelProps {
   input: RateSimInput;
@@ -29,7 +30,7 @@ interface RateComparePanelProps {
   onChangeProduct: (id: string, patch: Partial<RateProductDef>) => void;
   onAddProduct: (kind: RateKind) => void;
   onRemoveProduct: (id: string) => void;
-  plansState?: any;
+  plansState?: PlansState;
   onApplyProductToPlan?: (productId: string, planId: string) => void;
 }
 
@@ -339,7 +340,7 @@ export function RateComparePanel({
                               <p className="px-2.5 py-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 border-b border-dashed border-slate-100 dark:border-slate-800 mb-1">
                                 連動先ライフプラン
                               </p>
-                              {plansState.plans.map((p: any) => (
+                              {plansState.plans.map((p: Plan) => (
                                 <button
                                   key={p.id}
                                   type="button"

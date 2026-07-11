@@ -3,6 +3,8 @@ import { NumberSlider } from './NumberSlider';
 import { SmartInput } from './SmartInput';
 import { CollapsibleSection } from './CollapsibleSection';
 import { formatManLabel } from '../lib/format';
+import type { RateSimState } from '../lib/rateStorage';
+import type { RateProductDef } from '../lib/rate';
 import type {
   FormState,
   LifeEvent,
@@ -10,6 +12,7 @@ import type {
   IncomeItem,
   IncomeOwner,
   IncomeKind,
+  WizardInput,
 } from '../types';
 
 const EXPENSE_PRESETS: { label: string; amountMan: number; group?: string }[] = [
@@ -206,8 +209,10 @@ interface InputPanelProps {
   onSetCommonExpenses: (ids: string[], toCommon: boolean) => void;
   onSetCommonEvents: (ids: string[], toCommon: boolean) => void;
   commonIds: Set<string>;
-  rateState?: any;
+  rateState?: RateSimState;
   onNavigateScreen?: (screen: 'lifeplan' | 'rate') => void;
+  wizardInput?: WizardInput;
+  onReconfigureWizard?: () => void;
 }
 
 function PinIcon({ filled }: { filled: boolean }) {
@@ -378,6 +383,8 @@ export function InputPanel({
   commonIds,
   rateState,
   onNavigateScreen,
+  wizardInput,
+  onReconfigureWizard,
 }: InputPanelProps) {
   const [open, setOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -810,6 +817,32 @@ export function InputPanel({
 
       {open && (
         <div className="mt-6 space-y-6">
+          {wizardInput && onReconfigureWizard && (
+            <div className="rounded-2xl bg-gradient-to-r from-indigo-50/80 to-indigo-100/40 p-4 border border-indigo-100/60 dark:from-indigo-950/20 dark:to-indigo-950/10 dark:border-indigo-900/40 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-1 pointer-events-none opacity-20 text-indigo-500">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-16 w-16">
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+                </svg>
+              </div>
+              <div className="flex flex-col gap-3 relative z-10">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    家族・持ち物条件の一括自動再計算
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mt-1">
+                    子ども人数や自動車台数などの「かんたん基本構成」をいつでも一括で再設定できます。連動する教育費・車検等のあらゆる複雑なスケジュールも自動で引き直し計算されます。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onReconfigureWizard}
+                  className="w-full sm:w-auto self-start rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-indigo-650/10 transition hover:bg-indigo-700 active:scale-97 cursor-pointer"
+                >
+                  一括条件変更ウィザードを起動
+                </button>
+              </div>
+            </div>
+          )}
           <CollapsibleSection title="基本" defaultOpen>
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
         {(
@@ -838,7 +871,7 @@ export function InputPanel({
             label="借入額"
             value={value.loanAmountMan}
             min={0}
-            max={10000}
+            max={1000000}
             step={50}
             onChange={(v) => onChange({ loanAmountMan: v })}
             format={formatManLabel}
@@ -876,7 +909,7 @@ export function InputPanel({
               label="金利（年）"
               value={value.ratePct}
               min={0}
-              max={5}
+              max={20}
               step={0.05}
               onChange={(v) => onChange({ ratePct: v })}
               format={(v) => `${v.toFixed(2)}%`}
@@ -915,7 +948,7 @@ export function InputPanel({
               >
                 <option value="">-- 商品を選択 --</option>
                 {rateState?.products && rateState.products.length > 0 ? (
-                  rateState.products.map((p: any) => (
+                  rateState.products.map((p: RateProductDef) => (
                     <option key={p.id} value={p.id}>
                       {p.label || (p.kind === 'variable' ? '変動金利型' : p.kind === 'wholeFixed' ? '全期間固定' : `固定${p.fixedYears}年`)}（{p.initialRatePct.toFixed(2)}%
                       {p.kind === 'fixedPeriod' ? ` ➔ 終了後 ${p.afterRatePct?.toFixed(2)}%` : ''}）
@@ -926,7 +959,7 @@ export function InputPanel({
                 )}
               </select>
               {(() => {
-                const p = rateState?.products?.find((x: any) => x.id === value.selectedProductId);
+                const p = rateState?.products?.find((x: RateProductDef) => x.id === value.selectedProductId);
                 if (!p) return null;
                 return (
                   <p className="text-[11px] leading-normal text-indigo-700 dark:text-indigo-400 border-t border-indigo-100/50 dark:border-indigo-950/50 pt-1.5 mb-1">
@@ -1221,7 +1254,7 @@ export function InputPanel({
                       className="w-24 text-right"
                     />
                     <span className="text-xs text-slate-400">
-                      万円{incIsRetirement ? '（一度だけ）' : ''}
+                      {incIsRetirement ? '（一度だけ）' : ''}
                     </span>
                   </div>
                 </div>
@@ -1271,7 +1304,7 @@ export function InputPanel({
                       className="w-16 text-right"
                     />
                     <span className="text-xs text-slate-400">
-                      歳から{incIsRetirement ? 'の年に一度だけ' : ''}
+                      から{incIsRetirement ? 'の年に一度だけ' : ''}
                     </span>
                     {!incIsRetirement && (
                       <>
@@ -1287,7 +1320,7 @@ export function InputPanel({
                           className="w-16 text-right"
                         />
                         <span className="text-xs text-slate-400">
-                          {incEndAge.trim() ? '歳まで' : '歳まで（空＝ずっと）'}
+                          {incEndAge.trim() ? 'まで' : 'まで（空＝ずっと）'}
                         </span>
                       </>
                     )}
@@ -1301,14 +1334,15 @@ export function InputPanel({
                         <span className="text-xs text-slate-500 dark:text-slate-400">
                           ボーナス（月給の何ヶ月分／年）
                         </span>
-                        <input
-                          type="number"
-                          value={incBonusMonths}
+                        <SmartInput
+                          value={Number(incBonusMonths) || 0}
+                          onChange={(v) => setIncBonusMonths(String(v))}
                           min={0}
+                          max={24}
                           step={0.5}
-                          onChange={(e) => setIncBonusMonths(e.target.value)}
-                          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                          aria-label="ボーナス月数"
+                          label="ボーナス月数"
+                          format={(v) => `${v}ヶ月`}
+                          className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right"
                         />
                       </div>
                     )}
@@ -1316,28 +1350,30 @@ export function InputPanel({
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         昇給率（％／年）
                       </span>
-                      <input
-                        type="number"
-                        value={incRaiseRate}
+                      <SmartInput
+                        value={Number(incRaiseRate) || 0}
+                        onChange={(v) => setIncRaiseRate(String(v))}
                         min={0}
+                        max={20}
                         step={0.1}
-                        onChange={(e) => setIncRaiseRate(e.target.value)}
-                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        aria-label="昇給率"
+                        label="昇給率"
+                        format={(v) => `${v.toFixed(1)}%`}
+                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right"
                       />
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-slate-500 dark:text-slate-400">
                         昇給停止年齢
                       </span>
-                      <input
-                        type="number"
-                        value={incRaiseStopAge}
+                      <SmartInput
+                        value={Number(incRaiseStopAge) || 0}
+                        onChange={(v) => setIncRaiseStopAge(String(v))}
                         min={0}
                         max={120}
-                        onChange={(e) => setIncRaiseStopAge(e.target.value)}
-                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                        aria-label="昇給停止年齢"
+                        step={1}
+                        label="昇給停止年齢"
+                        format={(v) => `${v}歳`}
+                        className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right"
                       />
                     </div>
                   </div>
@@ -1521,16 +1557,17 @@ export function InputPanel({
                     月額
                   </p>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={expAmount}
+                    <SmartInput
+                      value={Number(expAmount) || 0}
+                      onChange={(v) => setExpAmount(String(v))}
                       min={0}
+                      max={1000}
                       step={0.5}
-                      onChange={(e) => setExpAmount(e.target.value)}
-                      className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                      aria-label="月額（万円）"
+                      label="月額"
+                      format={(v) => `${v}万円`}
+                      className="w-24 border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold tabular-nums text-slate-900 rounded-lg"
                     />
-                    <span className="text-xs text-slate-400">万円／月</span>
+                    <span className="text-xs text-slate-400">／月</span>
                   </div>
                 </div>
 
@@ -1539,31 +1576,32 @@ export function InputPanel({
                     期間（本人の年齢が基準）
                   </p>
                   <div className="flex flex-wrap items-center gap-1 text-sm">
-                    <input
-                      type="number"
-                      value={expStartAfter}
+                    <SmartInput
+                      value={Number(expStartAfter) || 0}
+                      onChange={(v) => setExpStartAfter(String(v))}
                       min={0}
                       max={60}
-                      placeholder="0"
-                      onChange={(e) => setExpStartAfter(e.target.value)}
-                      className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
-                      aria-label="何年後から"
+                      step={1}
+                      label="何年後から"
+                      format={(v) => `${v}年後`}
+                      className="w-14 border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold tabular-nums text-slate-900 rounded-lg"
                     />
                     <span className="text-xs text-slate-400">
-                      年後（{value.age + (Number(expStartAfter) || 0)}歳）から
+                      （{value.age + (Number(expStartAfter) || 0)}歳）から
                     </span>
-                    <input
-                      type="number"
-                      value={expDuration}
+                    <SmartInput
+                      value={Number(expDuration) || 0}
+                      onChange={(v) => setExpDuration(String(v))}
                       min={0}
                       max={80}
+                      step={1}
+                      label="何年間"
                       placeholder="ずっと"
-                      onChange={(e) => setExpDuration(e.target.value)}
-                      className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right placeholder:text-slate-300 dark:border-slate-700 dark:bg-slate-950"
-                      aria-label="何年間"
+                      format={(v) => v === 0 ? 'ずっと' : `${v}年間`}
+                      className="w-16 border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold tabular-nums text-slate-900 rounded-lg"
                     />
                     <span className="text-xs text-slate-400">
-                      {expDuration.trim() ? '年間' : '年間（空＝ずっと）'}
+                      {expDuration.trim() ? '' : '（空＝ずっと）'}
                     </span>
                   </div>
                 </div>
@@ -1606,7 +1644,7 @@ export function InputPanel({
           label="ボーナス払い（1回の返済額）"
           value={value.bonusRepayMan}
           min={0}
-          max={50}
+          max={1000000}
           step={1}
           onChange={(v) => onChange({ bonusRepayMan: v })}
           format={formatManLabel}
@@ -1616,7 +1654,7 @@ export function InputPanel({
           label="いまの貯金"
           value={value.initialSavingsMan}
           min={0}
-          max={3000}
+          max={1000000}
           step={50}
           onChange={(v) => onChange({ initialSavingsMan: v })}
           format={formatManLabel}
@@ -1654,7 +1692,7 @@ export function InputPanel({
                 label="毎年の積立額"
                 value={value.prepaySaveupPerYearMan}
                 min={0}
-                max={200}
+                max={1000000}
                 step={5}
                 onChange={(v) => onChange({ prepaySaveupPerYearMan: v })}
                 format={formatManLabel}
@@ -1664,7 +1702,7 @@ export function InputPanel({
                 label="繰上げを実行する額"
                 value={value.prepayTriggerMan}
                 min={10}
-                max={500}
+                max={1000000}
                 step={10}
                 onChange={(v) => onChange({ prepayTriggerMan: v })}
                 format={formatManLabel}
@@ -1784,17 +1822,18 @@ export function InputPanel({
                 {editingId ? 'イベントを編集' : 'イベントを追加'}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="number"
-              value={evYearsLater}
+            <SmartInput
+              value={Number(evYearsLater) || 0}
+              onChange={(v) => setEvYearsLater(String(v))}
               min={0}
               max={60}
-              onChange={(e) => setEvYearsLater(e.target.value)}
-              className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-              aria-label="何年後"
+              step={1}
+              label="経過年数"
+              format={(v) => `${v}年後`}
+              className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold"
             />
             <span className="text-xs text-slate-400">
-              年後（{value.age + (Number(evYearsLater) || 0)}歳）
+              （{value.age + (Number(evYearsLater) || 0)}歳）
             </span>
             <input
               type="text"
@@ -1811,16 +1850,16 @@ export function InputPanel({
               }`}
               aria-label="イベント名"
             />
-            <input
-              type="number"
-              value={evAmount}
+            <SmartInput
+              value={Number(evAmount) || 0}
+              onChange={(v) => setEvAmount(String(v))}
               min={0}
+              max={5000}
               step={10}
-              onChange={(e) => setEvAmount(e.target.value)}
-              className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-              aria-label="金額（万円）"
+              label="金額（万円）"
+              format={(v) => `${v}万円`}
+              className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold"
             />
-            <span className="text-xs text-slate-400">万円</span>
             <div className="flex w-full flex-wrap items-center gap-2 pt-1">
               <span className="text-xs text-slate-400">くりかえし</span>
               <button
@@ -1847,28 +1886,28 @@ export function InputPanel({
               </button>
               {evRecurring && (
                 <>
-                  <input
-                    type="number"
-                    value={evInterval}
+                  <SmartInput
+                    value={Number(evInterval) || 10}
+                    onChange={(v) => setEvInterval(String(v))}
                     min={1}
                     max={40}
-                    placeholder="10"
-                    onChange={(e) => setEvInterval(e.target.value)}
-                    className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    aria-label="何年ごと"
+                    step={1}
+                    label="定期間隔"
+                    format={(v) => `${v}年ごと`}
+                    className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold"
                   />
-                  <span className="text-xs text-slate-400">年ごと・</span>
-                  <input
-                    type="number"
-                    value={evUntilAge}
+                  <span className="text-xs text-slate-400">・</span>
+                  <SmartInput
+                    value={Number(evUntilAge) || (value.age + 30)}
+                    onChange={(v) => setEvUntilAge(String(v))}
                     min={value.age}
                     max={100}
-                    placeholder={String(value.age + 30)}
-                    onChange={(e) => setEvUntilAge(e.target.value)}
-                    className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950"
-                    aria-label="終了年齢"
+                    step={1}
+                    label="終了年齢"
+                    format={(v) => `${v}歳`}
+                    className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-950 text-right font-bold"
                   />
-                  <span className="text-xs text-slate-400">歳まで</span>
+                  <span className="text-xs text-slate-400">まで</span>
                 </>
               )}
             </div>

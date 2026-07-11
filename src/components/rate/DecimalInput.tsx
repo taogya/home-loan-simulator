@@ -51,7 +51,7 @@ export function DecimalInput({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`lg:hidden block cursor-pointer select-none rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white transition hover:bg-slate-50 dark:hover:bg-slate-800 ${widthClass}`}
+        className={`lg:hidden block cursor-pointer select-none rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-right text-xs sm:text-sm font-bold tabular-nums text-slate-900 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white transition hover:bg-slate-50 dark:hover:bg-slate-800 whitespace-nowrap min-w-[4.5rem] px-3 ${widthClass}`}
         title="タップして調整ダイヤルを開く"
         aria-label={`${ariaLabel}をダイヤル入力`}
       >

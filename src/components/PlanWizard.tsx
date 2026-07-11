@@ -1,25 +1,8 @@
 import { useState } from 'react';
 import { DEFAULT_FORM } from '../types';
-import type { FormState, IncomeItem, ExpenseItem, LifeEvent } from '../types';
+import { SmartInput } from './SmartInput';
+import type { FormState, IncomeItem, ExpenseItem, LifeEvent, WizardInput } from '../types';
 import { formatManLabel } from '../lib/format';
-
-interface WizardInput {
-  housingType: 'own' | 'rent';
-  age: number;
-  loanAmountMan: number;
-  ratePct: number;
-  years: number;
-  rentMan: number;
-  monthlySalaryMan: number;
-  bonusMonths: number;
-  hasSpouse: boolean;
-  spouseIncomeMan: number;
-  livingCostMan: number;
-  childBirthOffsets: number[];
-  hasCar: boolean;
-  carCount: number;
-  initialSavingsMan: number;
-}
 
 const uid = () => crypto.randomUUID();
 
@@ -215,32 +198,45 @@ function getLivingCostPresets(hasSpouse: boolean, childCount: number): { modest:
 }
 
 interface PlanWizardProps {
-  onCreate: (form: FormState) => void;
+  onCreate: (form: FormState, wizardInput: WizardInput) => void;
   onClose: () => void;
   /** 空のプランを作る（自分で詳細入力したい人向け） */
   onCreateBlank: () => void;
+  /** 再設定/編集用の初期パラメータ */
+  initialInput?: WizardInput;
 }
 
 const numInput =
   'w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-right dark:border-slate-700 dark:bg-slate-950';
 
-export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps) {
-  const [housingType, setHousingType] = useState<'own' | 'rent'>('own');
-  const [age, setAge] = useState('35');
-  const [loanAmountMan, setLoanAmountMan] = useState('3500');
-  const [ratePct, setRatePct] = useState('1.0');
-  const [years, setYears] = useState('35');
-  const [rentMan, setRentMan] = useState('12');
-  const [monthlySalaryMan, setMonthlySalaryMan] = useState('30');
-  const [bonusMonths, setBonusMonths] = useState('4');
-  const [hasSpouse, setHasSpouse] = useState(false);
-  const [spouseIncomeMan, setSpouseIncomeMan] = useState('300');
-  const [children, setChildren] = useState<{ born: boolean; value: string }[]>([]);
-  const [livingCostLevel, setLivingCostLevel] = useState<'modest' | 'standard' | 'luxury' | 'custom'>('standard');
-  const [customLivingCostMan, setCustomLivingCostMan] = useState('14');
-  const [hasCar, setHasCar] = useState(true);
-  const [carCount, setCarCount] = useState(1);
-  const [savings, setSavings] = useState('300');
+export function PlanWizard({ onCreate, onClose, onCreateBlank, initialInput }: PlanWizardProps) {
+  const [housingType, setHousingType] = useState<'own' | 'rent'>(initialInput?.housingType ?? 'own');
+  const [age, setAge] = useState(initialInput ? String(initialInput.age) : '35');
+  const [loanAmountMan, setLoanAmountMan] = useState(initialInput ? String(initialInput.loanAmountMan) : '3500');
+  const [ratePct, setRatePct] = useState(initialInput ? String(initialInput.ratePct) : '1.0');
+  const [years, setYears] = useState(initialInput ? String(initialInput.years) : '35');
+  const [rentMan, setRentMan] = useState(initialInput ? String(initialInput.rentMan) : '12');
+  const [monthlySalaryMan, setMonthlySalaryMan] = useState(initialInput ? String(initialInput.monthlySalaryMan) : '30');
+  const [bonusMonths, setBonusMonths] = useState(initialInput ? String(initialInput.bonusMonths) : '4');
+  const [hasSpouse, setHasSpouse] = useState(initialInput?.hasSpouse ?? false);
+  const [spouseIncomeMan, setSpouseIncomeMan] = useState(initialInput ? String(initialInput.spouseIncomeMan) : '300');
+  const [children, setChildren] = useState<{ born: boolean; value: string }[]>(() => {
+    if (initialInput?.childBirthOffsets) {
+      return initialInput.childBirthOffsets.map(offset => ({
+        born: offset <= 0,
+        value: String(Math.abs(offset))
+      }));
+    }
+    return [];
+  });
+  const [livingCostLevel, setLivingCostLevel] = useState<'modest' | 'standard' | 'luxury' | 'custom'>(() => {
+    if (initialInput) return 'custom';
+    return 'standard';
+  });
+  const [customLivingCostMan, setCustomLivingCostMan] = useState(initialInput ? String(initialInput.livingCostMan) : '14');
+  const [hasCar, setHasCar] = useState(initialInput?.hasCar ?? true);
+  const [carCount, setCarCount] = useState(initialInput?.carCount ?? 1);
+  const [savings, setSavings] = useState(initialInput ? String(initialInput.initialSavingsMan) : '300');
 
   const currentPresets = getLivingCostPresets(hasSpouse, children.length);
 
@@ -255,7 +251,7 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
   }
 
   const setCount = (n: number) => {
-    const next = Math.max(0, Math.min(5, n));
+    const next = Math.max(0, Math.min(15, n));
     setChildren((prev) => {
       const arr = [...prev];
       while (arr.length < next) arr.push({ born: false, value: '2' });
@@ -266,28 +262,27 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
 
   const handleCreate = () => {
     const ageNum = Number(age) || 35;
-    onCreate(
-      buildFormFromWizard({
-        housingType,
-        age: ageNum,
-        loanAmountMan: Number(loanAmountMan) || 0,
-        ratePct: Number(ratePct) || 0,
-        years: Number(years) || 35,
-        rentMan: Number(rentMan) || 0,
-        monthlySalaryMan: Number(monthlySalaryMan) || 0,
-        bonusMonths: Number(bonusMonths) || 0,
-        hasSpouse,
-        spouseIncomeMan: hasSpouse ? Number(spouseIncomeMan) || 0 : 0,
-        livingCostMan: Number(customLivingCostMan) || 14,
-        childBirthOffsets: children.map((c) => {
-          const v = Number(c.value) || 0;
-          return c.born ? -v : v;
-        }),
-        hasCar,
-        carCount,
-        initialSavingsMan: Number(savings) || 0,
+    const input: WizardInput = {
+      housingType,
+      age: ageNum,
+      loanAmountMan: Number(loanAmountMan) || 0,
+      ratePct: Number(ratePct) || 0,
+      years: Number(years) || 35,
+      rentMan: Number(rentMan) || 0,
+      monthlySalaryMan: Number(monthlySalaryMan) || 0,
+      bonusMonths: Number(bonusMonths) || 0,
+      hasSpouse,
+      spouseIncomeMan: hasSpouse ? Number(spouseIncomeMan) || 0 : 0,
+      livingCostMan: Number(customLivingCostMan) || 14,
+      childBirthOffsets: children.map((c) => {
+        const v = Number(c.value) || 0;
+        return c.born ? -v : v;
       }),
-    );
+      hasCar,
+      carCount,
+      initialSavingsMan: Number(savings) || 0,
+    };
+    onCreate(buildFormFromWizard(input), input);
   };
 
   return (
@@ -301,10 +296,12 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
       <div className="relative z-10 max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-600 sm:hidden" />
         <h2 className="text-base font-bold text-slate-900 dark:text-white">
-          かんたんプラン作成
+          {initialInput ? '🪄 かんたんプラン再構成・一括変更' : 'かんたんプラン作成'}
         </h2>
         <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-          代表的な項目だけ入力すれば、教育費・修繕費・車の買い替えなどを自動で追加します（あとで自由に調整できます）
+          {initialInput
+            ? '子どもや車の数・年齢などの基本設定をまとめて変更し、ライフプラン全体の連動項目（教育費や車検・維持費など）を自動で一括再計算します。'
+            : '代表的な項目だけ入力すれば、教育費・修繕費・車の買い替えなどを自動で追加します（あとで自由に調整できます）'}
         </p>
 
         <div className="mt-4 space-y-4">
@@ -342,15 +339,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
               現在の年齢
             </span>
             <span className="flex items-center gap-1">
-              <input
-                type="number"
-                value={age}
+              <SmartInput
+                value={Number(age) || 35}
+                onChange={(v) => setAge(String(v))}
                 min={18}
                 max={70}
-                onChange={(e) => setAge(e.target.value)}
+                step={1}
+                label="現在の年齢"
+                format={(v) => `${v}歳`}
                 className={numInput}
               />
-              <span className="text-xs text-slate-400">歳</span>
             </span>
           </label>
 
@@ -362,15 +360,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                   借入額
                 </span>
                 <span className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={loanAmountMan}
+                  <SmartInput
+                    value={Number(loanAmountMan) || 0}
+                    onChange={(v) => setLoanAmountMan(String(v))}
                     min={0}
+                    max={1000000}
                     step={50}
-                    onChange={(e) => setLoanAmountMan(e.target.value)}
+                    label="借入額"
+                    format={(v) => `${v.toLocaleString('ja-JP')}万円`}
                     className={numInput}
                   />
-                  <span className="text-xs text-slate-400">万円</span>
                 </span>
               </label>
               <label className="flex items-center justify-between gap-2">
@@ -378,15 +377,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                   金利（年）
                 </span>
                 <span className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={ratePct}
+                  <SmartInput
+                    value={Number(ratePct) || 0}
+                    onChange={(v) => setRatePct(String(v))}
                     min={0}
-                    step={0.05}
-                    onChange={(e) => setRatePct(e.target.value)}
+                    max={10}
+                    step={0.01}
+                    label="金利（年）"
+                    format={(v) => `${v.toFixed(2)}%`}
                     className={numInput}
                   />
-                  <span className="text-xs text-slate-400">%</span>
                 </span>
               </label>
               <label className="flex items-center justify-between gap-2">
@@ -394,15 +394,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                   返済期間
                 </span>
                 <span className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={years}
+                  <SmartInput
+                    value={Number(years) || 35}
+                    onChange={(v) => setYears(String(v))}
                     min={1}
                     max={50}
-                    onChange={(e) => setYears(e.target.value)}
+                    step={1}
+                    label="返済期間"
+                    format={(v) => `${v}年`}
                     className={numInput}
                   />
-                  <span className="text-xs text-slate-400">年</span>
                 </span>
               </label>
             </div>
@@ -412,14 +413,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                 家賃（月額）
               </span>
               <span className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={rentMan}
+                <SmartInput
+                  value={Number(rentMan) || 0}
+                  onChange={(v) => setRentMan(String(v))}
                   min={0}
-                  onChange={(e) => setRentMan(e.target.value)}
+                  max={200}
+                  step={1}
+                  label="家賃（月額）"
+                  format={(v) => `${v}万円`}
                   className={numInput}
                 />
-                <span className="text-xs text-slate-400">万円</span>
               </span>
             </label>
           )}
@@ -431,30 +434,33 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                 月給（額面）
               </span>
               <span className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={monthlySalaryMan}
+                <SmartInput
+                  value={Number(monthlySalaryMan) || 0}
+                  onChange={(v) => setMonthlySalaryMan(String(v))}
                   min={0}
-                  onChange={(e) => setMonthlySalaryMan(e.target.value)}
+                  max={100000}
+                  step={1}
+                  label="月給（額面）"
+                  format={(v) => `${v}万円`}
                   className={numInput}
                 />
-                <span className="text-xs text-slate-400">万円</span>
               </span>
             </label>
             <label className="flex items-center justify-between gap-2">
               <span className="text-sm text-slate-700 dark:text-slate-200">
-                ボーナス（月給の何ヶ月分）
+                ボーナス<span className="hidden sm:inline">（月給の何ヶ月分）</span>
               </span>
               <span className="flex items-center gap-1">
-                <input
-                  type="number"
-                  value={bonusMonths}
+                <SmartInput
+                  value={Number(bonusMonths) || 0}
+                  onChange={(v) => setBonusMonths(String(v))}
                   min={0}
+                  max={24}
                   step={0.5}
-                  onChange={(e) => setBonusMonths(e.target.value)}
+                  label="ボーナス（ヶ月）"
+                  format={(v) => `${v}ヶ月`}
                   className={numInput}
                 />
-                <span className="text-xs text-slate-400">ヶ月</span>
               </span>
             </label>
           </div>
@@ -463,22 +469,22 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                生活費（月・教育費を除く）
+                生活費<span className="hidden sm:inline">（月・教育費を除く）</span>
               </p>
               <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  value={customLivingCostMan}
-                  min={1}
-                  max={100}
-                  onChange={(e) => {
-                    setCustomLivingCostMan(e.target.value);
+                <SmartInput
+                  value={Number(customLivingCostMan) || 0}
+                  onChange={(v) => {
+                    setCustomLivingCostMan(String(v));
                     setLivingCostLevel('custom');
                   }}
+                  min={1}
+                  max={100}
+                  step={1}
+                  label="生活費"
+                  format={(v) => `${v}万円/月`}
                   className={numInput}
-                  aria-label="生活費の直接変更"
                 />
-                <span className="text-xs text-slate-400 font-medium">万円/月</span>
               </div>
             </div>
             <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/60">
@@ -540,18 +546,19 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
             {hasSpouse && (
               <label className="mt-2 flex items-center justify-between gap-2">
                 <span className="text-sm text-slate-700 dark:text-slate-200">
-                  配偶者の年収（額面）
+                  配偶者の年収<span className="hidden sm:inline">（額面）</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={spouseIncomeMan}
+                  <SmartInput
+                    value={Number(spouseIncomeMan) || 0}
+                    onChange={(v) => setSpouseIncomeMan(String(v))}
                     min={0}
+                    max={1000000}
                     step={10}
-                    onChange={(e) => setSpouseIncomeMan(e.target.value)}
+                    label="配偶者の年収"
+                    format={(v) => `${v}万円`}
                     className={numInput}
                   />
-                  <span className="text-xs text-slate-400">万円</span>
                 </span>
               </label>
             )}
@@ -580,7 +587,7 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                   type="button"
                   onClick={() => setCount(children.length + 1)}
                   className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:hover:bg-slate-800"
-                  disabled={children.length >= 5}
+                  disabled={children.length >= 15}
                   aria-label="子どもを増やす"
                 >
                   ＋
@@ -625,24 +632,22 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                           </button>
                         ))}
                       </div>
-                      <input
-                        type="number"
-                        value={c.value}
-                        min={0}
-                        max={30}
-                        onChange={(e) =>
+                      <SmartInput
+                        value={Number(c.value) || 0}
+                        onChange={(v) =>
                           setChildren((prev) =>
                             prev.map((x, j) =>
-                              j === i ? { ...x, value: e.target.value } : x,
+                              j === i ? { ...x, value: String(v) } : x,
                             ),
                           )
                         }
-                        className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-950"
-                        aria-label={`子${i + 1}の${c.born ? '年齢' : '誕生まで'}`}
+                        min={0}
+                        max={30}
+                        step={1}
+                        label={`子${i + 1}の${c.born ? '年齢' : '誕生まで'}`}
+                        format={(v) => c.born ? `${v}歳` : `${v}年後`}
+                        className="w-14 text-right"
                       />
-                      <span className="text-xs text-slate-400">
-                        {c.born ? '歳' : '年後'}
-                      </span>
                     </div>
                   </div>
                 ))}
@@ -698,9 +703,9 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
                   </span>
                   <button
                     type="button"
-                    onClick={() => setCarCount((n) => Math.min(3, n + 1))}
+                    onClick={() => setCarCount((n) => Math.min(10, n + 1))}
                     className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:opacity-30 dark:border-slate-700 dark:hover:bg-slate-800"
-                    disabled={carCount >= 3}
+                    disabled={carCount >= 10}
                     aria-label="台数を増やす"
                   >
                     ＋
@@ -716,15 +721,16 @@ export function PlanWizard({ onCreate, onClose, onCreateBlank }: PlanWizardProps
               いまの貯金
             </span>
             <span className="flex items-center gap-1">
-              <input
-                type="number"
-                value={savings}
+              <SmartInput
+                value={Number(savings) || 0}
+                onChange={(v) => setSavings(String(v))}
                 min={0}
+                max={100000}
                 step={50}
-                onChange={(e) => setSavings(e.target.value)}
+                label="いまの貯金"
+                format={(v) => `${v.toLocaleString('ja-JP')}万円`}
                 className={numInput}
               />
-              <span className="text-xs text-slate-400">万円</span>
             </span>
           </label>
 

@@ -1,4 +1,4 @@
-import { formatYen, formatJpyCompact } from '../lib/format';
+import { formatJpyCompact, formatFlexibleYen } from '../lib/format';
 import type { PlanResult } from '../lib/plan';
 
 interface StatHighlightProps {
@@ -9,6 +9,7 @@ const toneClasses: Record<string, string> = {
   emerald: 'text-emerald-600 dark:text-emerald-400',
   amber: 'text-amber-600 dark:text-amber-400',
   rose: 'text-rose-600 dark:text-rose-400',
+  slate: 'text-slate-500 dark:text-slate-400',
 };
 
 function burdenTone(pct: number): { label: string; color: string } {
@@ -21,7 +22,11 @@ export function StatHighlight({ result }: StatHighlightProps) {
   const isRent = result.housingType === 'rent';
   const years = result.payoffYears;
   const payoffYear = new Date().getFullYear() + years;
-  const tone = burdenTone(result.repaymentBurdenPct);
+  // 開始時点の収入が無い（0円）と負担率は算出不能。0% を「ゆとりあり」と誤表示しないよう別扱いにする。
+  const noIncome = !isRent && result.startAnnualIncome === 0;
+  const tone = noIncome
+    ? { label: '収入が未設定です', color: 'slate' }
+    : burdenTone(result.repaymentBurdenPct);
 
   return (
     <div className="space-y-3">
@@ -31,11 +36,10 @@ export function StatHighlight({ result }: StatHighlightProps) {
           {isRent ? (
             <>
               <p className="text-xs opacity-80">毎月の家賃</p>
-              <div className="mt-0.5 flex items-end gap-2">
-                <span className="text-4xl font-extrabold leading-none tabular-nums">
-                  {formatYen(result.monthlyRent)}
+              <div className="mt-0.5 flex flex-wrap items-end gap-1.5 leading-none">
+                <span className="text-2xl sm:text-4xl font-extrabold tabular-nums break-words max-w-full">
+                  {formatFlexibleYen(result.monthlyRent)}
                 </span>
-                <span className="mb-0.5 text-xl font-bold">円</span>
               </div>
               <p className="mt-1.5 text-xs opacity-80">
                 賃貸プラン・{result.renewalIntervalYears}年ごとに更新料
@@ -60,52 +64,57 @@ export function StatHighlight({ result }: StatHighlightProps) {
 
       {/* サブ指標 */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="card p-3">
-          <p className="text-xs text-slate-400 dark:text-slate-500">
+        <div className="card p-3 min-w-0 overflow-hidden">
+          <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
             {isRent ? '更新料' : `毎月の返済${!isRent && result.maxMonthlyPayment > result.monthlyPayment ? '（当初）' : ''}`}
           </p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900 dark:text-white">
-            {formatYen(isRent ? result.renewalFee : result.monthlyPayment)}
-            <span className="ml-0.5 text-sm font-medium">円</span>
+          <p className="mt-0.5 text-lg sm:text-xl font-bold tabular-nums text-slate-900 dark:text-white truncate" title={formatFlexibleYen(isRent ? result.renewalFee : result.monthlyPayment)}>
+            {formatFlexibleYen(isRent ? result.renewalFee : result.monthlyPayment)}
           </p>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500 truncate" title={!isRent && result.maxMonthlyPayment > result.monthlyPayment ? `📈 金利上昇時最大: ${formatFlexibleYen(result.maxMonthlyPayment)}` : ''}>
             {isRent
               ? `${result.renewalIntervalYears}年ごと`
               : !isRent && result.maxMonthlyPayment > result.monthlyPayment
-                ? `📈 金利上昇時最大: ${formatYen(result.maxMonthlyPayment)}円`
+                ? `📈 上昇時最大: ${formatFlexibleYen(result.maxMonthlyPayment)}`
                 : result.bonusPayment > 0
-                  ? `＋ボーナス時 ${formatYen(result.bonusPayment)}円`
+                  ? `＋ボーナス時 ${formatFlexibleYen(result.bonusPayment)}`
                   : 'ボーナス払いなし'}
           </p>
         </div>
 
-        <div className="card p-3">
-          <p className="text-xs text-slate-400 dark:text-slate-500">
+        <div className="card p-3 min-w-0 overflow-hidden">
+          <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
             {isRent ? '年間の家賃' : '総利息'}
           </p>
-          <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900 dark:text-white">
+          <p className="mt-0.5 text-lg sm:text-xl font-bold tabular-nums text-slate-900 dark:text-white truncate">
             {formatJpyCompact(
               isRent ? result.annualRepayment : result.totalInterest,
             )}
           </p>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500 truncate" title={`総返済 ${formatJpyCompact(result.totalPayment)}`}>
             {isRent
               ? '更新料は別途'
               : `総返済 ${formatJpyCompact(result.totalPayment)}`}
           </p>
         </div>
 
-        <div className="card p-3">
-          <p className="text-xs text-slate-400 dark:text-slate-500">
+        <div className="card p-3 min-w-0 overflow-hidden">
+          <p className="text-xs text-slate-400 dark:text-slate-500 truncate">
             {isRent ? '家賃負担率' : `返済負担率${!isRent && result.maxMonthlyPayment > result.monthlyPayment ? '（当初）' : ''}`}
           </p>
           <p
-            className={`mt-0.5 text-xl font-bold tabular-nums ${toneClasses[tone.color]}`}
+            className={`mt-0.5 text-lg sm:text-xl font-bold tabular-nums truncate ${toneClasses[tone.color]}`}
           >
-            {result.repaymentBurdenPct.toFixed(0)}
-            <span className="ml-0.5 text-sm font-medium">%</span>
+            {noIncome ? (
+              <span className="text-slate-400 dark:text-slate-500">—</span>
+            ) : (
+              <>
+                {result.repaymentBurdenPct.toFixed(0)}
+                <span className="ml-0.5 text-sm font-medium">%</span>
+              </>
+            )}
           </p>
-          <p className={`mt-1 text-xs font-medium ${toneClasses[tone.color]}`}>
+          <p className={`mt-1 text-xs font-medium truncate ${toneClasses[tone.color]}`}>
             {isRent
               ? tone.label
               : !isRent && result.maxMonthlyPayment > result.monthlyPayment
@@ -115,7 +124,7 @@ export function StatHighlight({ result }: StatHighlightProps) {
                       : 0;
                     const maxAnnualRepayment = result.maxMonthlyPayment * 12 + result.bonusPayment * 2;
                     const maxBurdenPct = netAnnualNow > 0 ? (maxAnnualRepayment / netAnnualNow) * 100 : result.repaymentBurdenPct;
-                    return `📈 上昇時最大: ${maxBurdenPct.toFixed(0)}% (${burdenTone(maxBurdenPct).label})`;
+                    return `📈 上昇時最大: ${maxBurdenPct.toFixed(0)}%`;
                   })()
                 : tone.label}
           </p>

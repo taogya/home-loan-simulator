@@ -56,8 +56,8 @@ export function RateInputPanel({
         <NumberSlider
           label="借入額"
           value={input.loanAmountMan}
-          min={100}
-          max={20000}
+          min={0}
+          max={1000000}
           step={50}
           onChange={(v) => onChangeInput({ loanAmountMan: v })}
           format={formatManLabel}

@@ -183,6 +183,24 @@ export const DEFAULT_FORM: FormState = {
   selectedProductId: '',
 };
 
+export interface WizardInput {
+  housingType: 'own' | 'rent';
+  age: number;
+  loanAmountMan: number;
+  ratePct: number;
+  years: number;
+  rentMan: number;
+  monthlySalaryMan: number;
+  bonusMonths: number;
+  hasSpouse: boolean;
+  spouseIncomeMan: number;
+  livingCostMan: number;
+  childBirthOffsets: number[];
+  hasCar: boolean;
+  carCount: number;
+  initialSavingsMan: number;
+}
+
 export interface Plan {
   /** 一意なID */
   id: string;
@@ -190,6 +208,8 @@ export interface Plan {
   name: string;
   /** プランの入力内容 */
   form: FormState;
+  /** かんたんウィザード作成時の一括インプット情報（再編集用） */
+  wizardInput?: WizardInput;
 }
 
 export interface PlansState {

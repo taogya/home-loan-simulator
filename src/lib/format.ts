@@ -6,6 +6,20 @@ export function formatYen(value: number): string {
 }
 
 /**
+ * 非常に大きな金額を、スマホやサマリーの限られたスペースに美しく収めるための自動ハイブリッド・フォーマッタ。
+ * - 1,000万円（100,000,000円）以上：億＋万単位で短縮（例：「1億2,300万円」など）
+ * - それ未満：通常のフルカンマ（例：「150,000円」）
+ * 円表記とコンパクト表記を極上に自動連動させてはみ出しをゼロにする。
+ */
+export function formatFlexibleYen(value: number): string {
+  const absVal = Math.abs(value);
+  if (absVal >= 10000000) { // 1,000万円以上
+    return formatJpyCompact(value);
+  }
+  return `${formatYen(value)}円`;
+}
+
+/**
  * 円を「○億○○万円」形式のコンパクト表示にする。
  * 例: 35,000,000 -> "3,500万円", 123,400,000 -> "1億2,340万円"
  */
@@ -19,9 +33,24 @@ export function formatJpyCompact(value: number): string {
   return `${parts.join('')}円`;
 }
 
-/** 万円単位の数値を「3,500万円」のように表示する */
+/** 万円単位の数値を「3,500万円」や「1億2,300万円」形式で、3桁カンマ付きで読みやすく表示する（マルチ億万フォーマッタ） */
 export function formatManLabel(man: number): string {
-  return `${(man ?? 0).toLocaleString('ja-JP')}万円`;
+  if (man === 0) return '0万円';
+  const isNegative = man < 0;
+  const absValue = Math.abs(man);
+  const oku = Math.floor(absValue / 10000);
+  const residualMan = Math.round(absValue % 10000);
+
+  const parts: string[] = [];
+  if (oku > 0) {
+    parts.push(`${oku.toLocaleString('ja-JP')}億`);
+    if (residualMan > 0) {
+      parts.push(`${residualMan.toLocaleString('ja-JP')}万`);
+    }
+  } else {
+    parts.push(`${residualMan.toLocaleString('ja-JP')}万`);
+  }
+  return `${isNegative ? '-' : ''}${parts.join('')}円`;
 }
 
 /**
@@ -32,8 +61,8 @@ export function formatChartManYAxis(man: number): string {
   if (man === 0) return '0';
   const isNegative = man < 0;
   const absValue = Math.abs(man);
-  let label = '';
-  
+  let label: string;
+
   if (absValue >= 10000) {
     const oku = absValue / 10000;
     if (Math.round(oku * 10) % 10 === 0) {

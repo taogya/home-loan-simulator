@@ -3,6 +3,8 @@
 // すべての金額は「円」単位で扱う。
 
 import type { FormState, ExpenseItem, IncomeItem, CommonSettings } from '../types';
+import type { RateSimState } from './rateStorage';
+import type { RateProductDef, RateScenario } from './rate';
 import { eventOccursAt } from './events';
 
 /** 共通設定をプランの form に合成した form を返す（共通→専用の順で結合）。 */
@@ -70,6 +72,8 @@ export interface PlanResult {
   payoffYears: number;
   /** 返済負担率（年間返済額 / 年収, %） */
   repaymentBurdenPct: number;
+  /** 開始時点（現在）の手取り年収（円）。0 のとき返済負担率は算出できない（収入未設定） */
+  startAnnualIncome: number;
   /** 将来の最大月返済額（金利上昇時、固定金利などの場合は monthlyPayment と同じ） */
   maxMonthlyPayment: number;
   /** ライフプラン中の貯金残高の最大（円） */
@@ -204,7 +208,7 @@ function annualIncomeAt(
   return estimateTakeHome(grossSelf) + estimateTakeHome(grossSpouse) + net;
 }
 
-export function simulatePlan(form: FormState, rateState?: any): PlanResult {
+export function simulatePlan(form: FormState, rateState?: RateSimState): PlanResult {
   const isRent = form.housingType === 'rent';
   const principal = isRent ? 0 : form.loanAmountMan * 10000;
   const startAge = form.age;
@@ -228,7 +232,7 @@ export function simulatePlan(form: FormState, rateState?: any): PlanResult {
       return scenarioRateAt(scenario, elapsedMonths);
     }
     if (interestType === 'product' && rateState) {
-      const p = rateState.products.find((x: any) => x.id === form.selectedProductId);
+      const p = rateState.products.find((x: RateProductDef) => x.id === form.selectedProductId);
       if (!p) return form.ratePct;
       if (p.kind === 'wholeFixed') {
         return p.initialRatePct;
@@ -252,7 +256,7 @@ export function simulatePlan(form: FormState, rateState?: any): PlanResult {
     return form.ratePct;
   };
 
-  function scenarioRateAt(sc: any, month: number): number {
+  function scenarioRateAt(sc: RateScenario, month: number): number {
     const points = sc.points;
     if (!points || points.length === 0) return 0.5;
     let rate = points[0]?.ratePct ?? 0;
@@ -512,6 +516,7 @@ export function simulatePlan(form: FormState, rateState?: any): PlanResult {
     payoffAge,
     payoffYears,
     repaymentBurdenPct,
+    startAnnualIncome: netAnnualNow,
     maxSavings: Math.max(...schedule.map((s) => s.savings), 0),
     maxMonthlyPayment: isRent ? form.rentMan * 10000 : peakMonthlyPayment,
     schedule,

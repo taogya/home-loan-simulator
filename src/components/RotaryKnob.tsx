@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 
 interface RotaryKnobProps {
   value: number;
@@ -18,12 +18,13 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const prevAngleRef = useRef<number | null>(null);
   const accumulatedAngleRef = useRef<number>(0); // 45度ステップ判定用の累積角度
 
-  // つまみ自身の物理回転角度（境界制限なしで、何周でもぐるぐる回り続ける）
-  const physicalAngleRef = useRef<number>(0);
-
   // 現在の値をパーセンテージに換算 (0〜1)
+  // 入力が max を遥かに超える 800% など不正な値の時、pct が 1 を超え（例えば pct=40 等）、
+  // Math.cos や Math.sin の円弧ゲージ、および ticks ループ判定が異常な表示位置になっていました。
+  // ここでパーセンテージ(pct)を厳密に 0 から 1 の範囲へ Math.max(0, Math.min(1, ...)) で防壁クランプします！
   const range = max - min;
-  const pct = range > 0 ? (value - min) / range : 0;
+  const rawPct = range > 0 ? (value - min) / range : 0;
+  const pct = Math.max(0, Math.min(1, rawPct));
 
   // アンプつまみは通常下側が開いた約 270度 の範囲で回転する
   // 最小値: -135度 (左斜め下)、最大値: +135度 (右斜め下)
@@ -31,18 +32,16 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const maxAngle = 135;
   const angleRange = maxAngle - minAngle; // 270度
 
-  // 値の割合からつまみの表示角度を決定する
-  useEffect(() => {
-    if (!isDragging) {
-      const targetAngle = minAngle + pct * angleRange;
-      setRotAngle(targetAngle);
-      physicalAngleRef.current = targetAngle; // 物理回転角も同期
-    }
-  }, [value, min, max, isDragging, pct, angleRange]);
+  // 値の割合から決まる本来の表示角度。ドラッグ中だけは指の動きに追随する rotAngle を用い、
+  // それ以外は値に対応する角度をそのまま表示する（派生値のため副作用は不要）。
+  const targetAngle = minAngle + pct * angleRange;
+  const displayAngle = isDragging ? rotAngle : targetAngle;
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (knobRef.current) {
       knobRef.current.setPointerCapture(e.pointerId);
+      // ドラッグ開始時、無限回転の起点を現在値の角度に合わせる
+      setRotAngle(targetAngle);
       setIsDragging(true);
 
       const rect = knobRef.current.getBoundingClientRect();
@@ -101,9 +100,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
     setIsDragging(false);
     prevAngleRef.current = null;
     accumulatedAngleRef.current = 0;
-    // 指を離したタイミングで、表示角度を現在の値にマッチした本来のアンプ角にスナップ
-    const targetAngle = minAngle + pct * angleRange;
-    setRotAngle(targetAngle);
+    // 非ドラッグ時は値に対応する角度(targetAngle)を表示するため、ここでの再設定は不要
   };
 
   // 目盛り用の点 (270度を10等分して並べる)
@@ -178,7 +175,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           style={{
-            transform: `rotate(${rotAngle}deg)`,
+              transform: `rotate(${displayAngle}deg)`,
             touchAction: 'none',
           }}
           className={`h-18 w-18 rounded-full cursor-grab active:cursor-grabbing flex items-center justify-center relative

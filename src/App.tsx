@@ -17,7 +17,7 @@ import {
   type RateSimState,
 } from './lib/rateStorage'
 import { isValidScenario, normalizeScenario } from './lib/rate'
-import { formatYen, formatManLabel } from './lib/format'
+import { formatManLabel, formatFlexibleYen } from './lib/format'
 import { DEFAULT_FORM, emptyCommon } from './types'
 import type {
   ExpenseItem,
@@ -26,6 +26,7 @@ import type {
   LifeEvent,
   Plan,
   PlansState,
+  WizardInput,
 } from './types'
 import { useTheme } from './hooks/useTheme'
 
@@ -203,6 +204,7 @@ function App() {
   const [chartTab, setChartTab] = useState<ChartTabId>('balance')
   const [viewMode, setViewMode] = useState<'edit' | 'compare'>('edit')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [wizardInitialInput, setWizardInitialInput] = useState<WizardInput | undefined>(undefined)
   const [mobileView, setMobileView] = useState<'input' | 'result'>('input')
   const [screen, setScreen] = useState<AppScreen>('lifeplan')
   const [rateState, setRateState] = useState<RateSimState>(loadRateState)
@@ -267,29 +269,24 @@ function App() {
   const activePlan = plans.find((p) => p.id === activeId) ?? plans[0]
   const form = activePlan?.form ?? DEFAULT_FORM
 
-  // ライフプランの入力（金額や期間）を金利シミュレータ側へ全自動でリアルタイムに引き継ぐ
-  useEffect(() => {
-    if (form) {
-      setRateState((prev) => {
-        if (
-          prev.input.loanAmountMan === form.loanAmountMan &&
-          prev.input.years === form.years &&
-          prev.input.age === form.age
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          input: {
-            ...prev.input,
-            loanAmountMan: form.loanAmountMan,
-            years: form.years,
-            age: form.age,
-          },
-        };
-      });
-    }
-  }, [form.loanAmountMan, form.years, form.age]);
+  // ライフプランの入力（金額や期間）を金利シミュレータ側へリアルタイムに引き継ぐ。
+  // レンダー中に差分があるときだけ同期することで、エフェクト内 setState による
+  // カスケードレンダリングを避ける（React 公式の「prop 変化に応じて state を調整する」パターン）。
+  if (
+    rateState.input.loanAmountMan !== form.loanAmountMan ||
+    rateState.input.years !== form.years ||
+    rateState.input.age !== form.age
+  ) {
+    setRateState((prev) => ({
+      ...prev,
+      input: {
+        ...prev.input,
+        loanAmountMan: form.loanAmountMan,
+        years: form.years,
+        age: form.age,
+      },
+    }))
+  }
 
   const update = (patch: Partial<FormState>) =>
     setPlansState((prev) =>
@@ -645,15 +642,23 @@ function App() {
   const makePlanName = (count: number) =>
     `プラン${String.fromCharCode(65 + count)}`
 
-  const createPlanFromWizard = (form: FormState) => {
+  const createPlanFromWizard = (form: FormState, wizardInput: WizardInput) => {
     setPlansState((prev) => {
+      // 1. 自動構成セットのラベル定義
+      const AUTO_GENERATED_INCOME_LABELS = new Set(['本人給与', '配偶者収入', '配偶者給与', '年金', '退職金'])
+      const AUTO_GENERATED_EXPENSE_LABELS = new Set(['生活費', '保険', '車の維持費', '幼稚園', '小学校', '中学校', '高校', '大学'])
+      const AUTO_GENERATED_EVENT_LABELS = new Set([
+        '車の買い替え', '車検', '出産', '大学入学金', 'リフォーム', '外壁・屋根の修繕', '給湯器の交換', 'エアコン買い替え', '家電の買い替え'
+      ])
+
       // すでに共通(📌)になっている項目と同名のものは作らない（共通を優先・重複防止）
       const commonExpenseLabels = new Set(
         prev.common.expenses.map((e) => e.label),
       )
       const commonEventLabels = new Set(prev.common.events.map((e) => e.label))
       const commonIncomeLabels = new Set(prev.common.incomes.map((i) => i.label))
-      const dedupedForm: FormState = {
+      
+      let dedupedForm: FormState = {
         ...form,
         expenses: form.expenses.filter(
           (e) => !commonExpenseLabels.has(e.label),
@@ -661,15 +666,57 @@ function App() {
         events: form.events.filter((e) => !commonEventLabels.has(e.label)),
         incomes: form.incomes.filter((i) => !commonIncomeLabels.has(i.label)),
       }
+
+      // すでにこのプランが裏に wizardInput を持っている場合は、新規プランではなく「上書き再構成（編集）」として扱う
+      const activePlan = prev.plans.find((p) => p.id === prev.activeId)
+      const isEdit = !!activePlan && !!activePlan.wizardInput
+
+      if (isEdit && activePlan) {
+        // 現在のプランの手入力カスタム項目（自動生成以外のユーザー定義項目、例えば「家族旅行」など）を抽出
+        const customIncomes = activePlan.form.incomes.filter(
+          (i) => !AUTO_GENERATED_INCOME_LABELS.has(i.label)
+        )
+        const customExpenses = activePlan.form.expenses.filter(
+          (e) => !AUTO_GENERATED_EXPENSE_LABELS.has(e.label)
+        )
+        const customEvents = activePlan.form.events.filter(
+          (e) => !AUTO_GENERATED_EVENT_LABELS.has(e.label)
+        )
+
+        // 新しい一括自動生成に、以前からあったカスタム（旅行など）をスマートにドッキング
+        dedupedForm = {
+          ...dedupedForm,
+          incomes: [...dedupedForm.incomes, ...customIncomes],
+          expenses: [...dedupedForm.expenses, ...customExpenses],
+          events: [...dedupedForm.events, ...customEvents],
+        }
+
+        return {
+          ...prev,
+          plans: prev.plans.map((p) => {
+            if (p.id === prev.activeId) {
+              return {
+                ...p,
+                form: dedupedForm,
+                wizardInput,
+              }
+            }
+            return p
+          }),
+        }
+      }
+
       const plan: Plan = {
         id: crypto.randomUUID(),
         name: makePlanName(prev.plans.length),
         form: dedupedForm,
+        wizardInput,
       }
       return { ...prev, plans: [...prev.plans, plan], activeId: plan.id }
     })
     setViewMode('edit')
     setWizardOpen(false)
+    setWizardInitialInput(undefined)
   }
 
   const createBlankPlan = () => {
@@ -998,6 +1045,11 @@ function App() {
             commonIds={commonIds}
             rateState={rateState}
             onNavigateScreen={setScreen}
+            wizardInput={activePlan?.wizardInput}
+            onReconfigureWizard={() => {
+              setWizardInitialInput(activePlan?.wizardInput)
+              setWizardOpen(true)
+            }}
           />
         </div>
         <div
@@ -1218,7 +1270,7 @@ function App() {
                     })()}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 animate-pulse-slow">
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     <svg
                       viewBox="0 0 24 24"
@@ -1234,17 +1286,16 @@ function App() {
                       <path d="M9 9l3 4 3-4M9.5 13.5h5M9.5 16h5M12 13v4" />
                     </svg>
                   </span>
-                  <div className="leading-tight">
+                  <div className="leading-tight min-w-0 flex-1">
                     <p className="text-[9px] text-slate-400 dark:text-slate-500">
                       {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment ? '毎月（当初）' : '毎月'}
                     </p>
-                    <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                      {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
-                      <span className="text-[10px] font-medium">円</span>
+                    <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-white truncate" title={formatFlexibleYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}>
+                      {formatFlexibleYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
                     </p>
                     {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (
-                      <p className="text-[8px] text-rose-500 dark:text-rose-450 font-bold leading-none mt-0.5 whitespace-nowrap">
-                        最大: {formatYen(result.maxMonthlyPayment)}円
+                      <p className="text-[8px] text-rose-500 dark:text-rose-450 font-bold leading-none mt-0.5 whitespace-nowrap truncate" title={`最大: ${formatFlexibleYen(result.maxMonthlyPayment)}`}>
+                        最大: {formatFlexibleYen(result.maxMonthlyPayment)}
                       </p>
                     )}
                   </div>
@@ -1307,11 +1358,11 @@ function App() {
               <div className="h-4 border-l border-slate-200 dark:border-slate-800" />
               <div>
                 <span>毎月: </span>
-                <span className="text-slate-900 dark:text-white font-bold">
-                  {formatYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}円
+                <span className="text-slate-900 dark:text-white font-bold inline-flex flex-wrap items-center">
+                  {formatFlexibleYen(result.housingType === 'rent' ? result.monthlyRent : result.monthlyPayment)}
                   {result.housingType === 'own' && result.maxMonthlyPayment > result.monthlyPayment && (
                     <span className="text-[10px] text-rose-500 font-bold ml-1">
-                      (最大 {Math.round(result.maxMonthlyPayment / 10000).toFixed(1)}万)
+                      (最大 {formatFlexibleYen(result.maxMonthlyPayment)})
                     </span>
                   )}
                 </span>
@@ -1328,8 +1379,12 @@ function App() {
       {wizardOpen && (
         <PlanWizard
           onCreate={createPlanFromWizard}
-          onClose={() => setWizardOpen(false)}
+          onClose={() => {
+            setWizardOpen(false)
+            setWizardInitialInput(undefined)
+          }}
           onCreateBlank={createBlankPlan}
+          initialInput={wizardInitialInput}
         />
       )}
     </div>

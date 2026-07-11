@@ -31,34 +31,16 @@ export function SmartInput({
 
   return (
     <>
-      {/* スマホ用：キーボードが出ない、タップして専用ロータリーテンキーを立ち上げるボタン */}
+      {/* スマホ・PC 共通：数値をタップ/クリックすると専用のロータリー＋テンキーを開く */}
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`lg:hidden block text-right border border-slate-200 bg-white px-2 py-1 text-sm font-bold tabular-nums text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-lg transition hover:bg-slate-50 dark:hover:bg-slate-800 ${className}`}
-        title="タップして調整ダイヤルを開く"
+        className={`inline-flex items-center justify-end whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-right text-sm font-bold tabular-nums text-indigo-600 shadow-sm transition hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-indigo-400 dark:hover:border-indigo-500 dark:hover:bg-indigo-950/40 ${className}`}
+        title="タップして調整ダイヤル＋テンキーを開く"
         aria-label={`${label}をダイヤル入力`}
       >
         {value === 0 && placeholder ? placeholder : displayVal}
       </button>
-
-      {/* PC用：通常のマウスでのキーボード数値入力 */}
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value === 0 ? '' : value}
-        onChange={(e) => {
-          const val = Number(e.target.value);
-          if (!Number.isNaN(val)) {
-            onChange(Math.min(max, Math.max(min, val)));
-          }
-        }}
-        placeholder={placeholder}
-        className={`hidden lg:block text-right ${className}`}
-        aria-label={label}
-      />
 
       {/* 共通特製ロータリーモーダル */}
       <RotaryInputModal

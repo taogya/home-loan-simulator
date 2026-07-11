@@ -17,6 +17,7 @@ import {
   type RateSimInput,
 } from '../../lib/rate';
 import type { Theme } from '../../hooks/useTheme';
+import type { PlansState } from '../../types';
 
 const SUB_TABS = [
   { id: 'compare', label: 'プラン比較' },
@@ -32,7 +33,7 @@ interface RateSimulatorScreenProps {
   theme: Theme;
   onExportScenario: () => void;
   onImportScenario: (file: File) => void;
-  plansState?: any;
+  plansState?: PlansState;
   onApplyProductToPlan?: (productId: string, planId: string) => void;
   onApplyScenarioToPlan?: (planId: string) => void;
 }
