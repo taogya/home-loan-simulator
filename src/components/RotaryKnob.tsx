@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 
 interface RotaryKnobProps {
   value: number;
@@ -37,41 +37,41 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const targetAngle = minAngle + pct * angleRange;
   const displayAngle = isDragging ? rotAngle : targetAngle;
 
-  // Propsを最新の状態に維持するref
-  const latestPropsRef = useRef({ value, min, max, step, onChange });
+  // イベントリスナー内から常に最新の props / 派生値を参照するための ref。
+  const latestRef = useRef({ value, min, max, step, onChange, targetAngle });
   useEffect(() => {
-    latestPropsRef.current = { value, min, max, step, onChange };
-  }, [value, min, max, step, onChange]);
+    latestRef.current = { value, min, max, step, onChange, targetAngle };
+  }, [value, min, max, step, onChange, targetAngle]);
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (knobRef.current) {
-      // iOS Safariの致命的バグ（setPointerCaptureによってポインターイベント全般がフリーズする問題）を避けるため、
-      // setPointerCaptureは使用せず、代わりにwindowに一時的にグローバルなイベントリスナーを貼ります。
-      setRotAngle(targetAngle);
-      setIsDragging(true);
+  // ドラッグ操作はすべてネイティブの pointer イベントで処理する。
+  // iOS Safari には、React の合成イベントや setPointerCapture を使うと
+  // ポインターイベントがフリーズ／pointercancel されてしまう既知の不具合がある。
+  // さらに、指がノブの外まで動くと touch-action:none が効かず、ブラウザが
+  // スクロールと誤判定して pointercancel を発火し、ドラッグが中断されてしまう。
+  // そこで、ノブ要素自身にだけ touchmove(passive:false) を登録して preventDefault する。
+  // iOS は touchstart したターゲット(=ノブ)へ touchmove を送り続けるので、指がノブの
+  // 外へ出てもスクロール判定を封じてドラッグを継続できる。document 全体には登録しないため、
+  // 他要素（モーダルの保存/キャンセルやウィザードのボタン）のタップを一切妨げない。
+  useEffect(() => {
+    const knob = knobRef.current;
+    if (!knob) return;
 
-      const rect = knobRef.current.getBoundingClientRect();
+    const getAngle = (clientX: number, clientY: number) => {
+      const rect = knob.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
+      return Math.atan2(clientY - cy, clientX - cx);
+    };
 
-      // 初回の角度 (ラジアン)
-      const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
-      prevAngleRef.current = angle;
-      accumulatedAngleRef.current = 0; // 開始時にズレをゼロリセット
-    }
-  };
+    // ノブ上のタッチによるスクロールを止め、iOS Safari の pointercancel を防ぐ
+    const preventScroll = (e: TouchEvent) => {
+      e.preventDefault();
+    };
 
-  useEffect(() => {
-    if (!isDragging) return;
+    const handleMove = (e: PointerEvent) => {
+      if (prevAngleRef.current === null) return;
 
-    const handleGlobalPointerMove = (e: PointerEvent) => {
-      if (prevAngleRef.current === null || !knobRef.current) return;
-
-      const rect = knobRef.current.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-
-      const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+      const currentAngle = getAngle(e.clientX, e.clientY);
       let dAngle = currentAngle - prevAngleRef.current;
 
       // 180度を跨いだときの補正
@@ -83,21 +83,21 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       const ANGLE_PER_STEP = Math.PI / 4; // 45度
       accumulatedAngleRef.current += dAngle;
 
-      const currentProps = latestPropsRef.current;
+      const p = latestRef.current;
 
       if (Math.abs(accumulatedAngleRef.current) >= ANGLE_PER_STEP) {
         const steps = Math.trunc(accumulatedAngleRef.current / ANGLE_PER_STEP);
         accumulatedAngleRef.current -= steps * ANGLE_PER_STEP;
 
-        let newValue = currentProps.value + steps * currentProps.step;
-        newValue = Math.max(currentProps.min, Math.min(currentProps.max, newValue));
-        const snappedValue = Math.round(newValue / currentProps.step) * currentProps.step;
+        let newValue = p.value + steps * p.step;
+        newValue = Math.max(p.min, Math.min(p.max, newValue));
+        const snappedValue = Math.round(newValue / p.step) * p.step;
 
-        const stepDecimals = (String(currentProps.step).split('.')[1] || '').length;
+        const stepDecimals = (String(p.step).split('.')[1] || '').length;
         const finalVal = Number(snappedValue.toFixed(stepDecimals));
 
-        if (finalVal !== currentProps.value) {
-          currentProps.onChange(finalVal);
+        if (finalVal !== p.value) {
+          p.onChange(finalVal);
         }
       }
 
@@ -105,22 +105,38 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       setRotAngle((prev) => prev + dAngle * (180 / Math.PI));
     };
 
-    const handleGlobalPointerUp = () => {
+    const handleUp = () => {
       setIsDragging(false);
       prevAngleRef.current = null;
       accumulatedAngleRef.current = 0;
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
 
-    window.addEventListener('pointermove', handleGlobalPointerMove);
-    window.addEventListener('pointerup', handleGlobalPointerUp);
-    window.addEventListener('pointercancel', handleGlobalPointerUp);
+    const handleDown = (e: PointerEvent) => {
+      setRotAngle(latestRef.current.targetAngle);
+      setIsDragging(true);
+      prevAngleRef.current = getAngle(e.clientX, e.clientY);
+      accumulatedAngleRef.current = 0; // 開始時にズレをゼロリセット
 
+      window.addEventListener('pointermove', handleMove);
+      window.addEventListener('pointerup', handleUp);
+      window.addEventListener('pointercancel', handleUp);
+    };
+
+    knob.addEventListener('pointerdown', handleDown);
+    // ノブ上のタッチスクロールだけを止める（passive:false 必須）。ノブがアンマウントされれば
+    // このリスナーも自動的に消えるので、document に残留して他要素のタップを奴う心配がない。
+    knob.addEventListener('touchmove', preventScroll, { passive: false });
     return () => {
-      window.removeEventListener('pointermove', handleGlobalPointerMove);
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
-      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+      knob.removeEventListener('pointerdown', handleDown);
+      knob.removeEventListener('touchmove', preventScroll);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
-  }, [isDragging]);
+  }, []);
 
   // 目盛り用の点 (270度を10等分して並べる)
   const ticks = [];
@@ -189,7 +205,6 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
         {/* 回すノブ */}
         <div
           ref={knobRef}
-          onPointerDown={handlePointerDown}
           style={{
               transform: `rotate(${displayAngle}deg)`,
             touchAction: 'none',

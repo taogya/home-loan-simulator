@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { RotaryKnob } from './RotaryKnob';
 
 interface RotaryInputModalProps {
@@ -17,7 +18,10 @@ export function RotaryInputModal(props: RotaryInputModalProps) {
   // 開いている間だけ中身をマウントすることで、開くたびにローカル状態が value で初期化される
   // （エフェクト内での setState を避け、カスケードレンダリングを防ぐ）。
   if (!props.isOpen) return null;
-  return <RotaryInputModalContent {...props} />;
+  // かんたんウィザード等の overflow-y-auto なスクロールコンテナや backdrop-filter を持つ
+  // 親の内側にレンダリングされると、iOS Safari でモーダル下部（保存/キャンセル）の
+  // タップ判定・重なり順が壊れる。document.body 直下へポータルして親の影響から切り離す。
+  return createPortal(<RotaryInputModalContent {...props} />, document.body);
 }
 
 function RotaryInputModalContent({
