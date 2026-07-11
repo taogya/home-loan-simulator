@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 interface RotaryKnobProps {
   value: number;
@@ -37,10 +37,16 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const targetAngle = minAngle + pct * angleRange;
   const displayAngle = isDragging ? rotAngle : targetAngle;
 
+  // Propsを最新の状態に維持するref
+  const propsRef = useRef({ value, min, max, step, onChange });
+  useEffect(() => {
+    propsRef.current = { value, min, max, step, onChange };
+  }, [value, min, max, step, onChange]);
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (knobRef.current) {
-      knobRef.current.setPointerCapture(e.pointerId);
-      // ドラッグ開始時、無限回転の起点を現在値の角度に合わせる
+      // iOS Safariの致命的バグ（setPointerCaptureによってポインターイベント全般がフリーズする問題）を避けるため、
+      // setPointerCaptureは使用せず、代わりにwindowに一時的にグローバルなイベントリスナーを貼ります。
       setRotAngle(targetAngle);
       setIsDragging(true);
 
@@ -55,53 +61,66 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
     }
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || prevAngleRef.current === null || !knobRef.current) return;
+  useEffect(() => {
+    if (!isDragging) return;
 
-    const rect = knobRef.current.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      if (prevAngleRef.current === null || !knobRef.current) return;
 
-    const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
-    let dAngle = currentAngle - prevAngleRef.current;
+      const rect = knobRef.current.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
 
-    // 180度を跨いだときの補正
-    if (dAngle > Math.PI) dAngle -= 2 * Math.PI;
-    if (dAngle < -Math.PI) dAngle += 2 * Math.PI;
+      const currentAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+      let dAngle = currentAngle - prevAngleRef.current;
 
-    prevAngleRef.current = currentAngle;
+      // 180度を跨いだときの補正
+      if (dAngle > Math.PI) dAngle -= 2 * Math.PI;
+      if (dAngle < -Math.PI) dAngle += 2 * Math.PI;
 
-    // 1/8 回転 (45度 = Math.PI / 4) ごとに正確に 1ステップ 変化させる仕様。
-    // スピードによる変化を排し、回した分だけ規則正しく連動するためバグっぽさが完全に消え、直感的。
-    const ANGLE_PER_STEP = Math.PI / 4; // 45度
-    accumulatedAngleRef.current += dAngle;
+      prevAngleRef.current = currentAngle;
 
-    if (Math.abs(accumulatedAngleRef.current) >= ANGLE_PER_STEP) {
-      const steps = Math.trunc(accumulatedAngleRef.current / ANGLE_PER_STEP);
-      accumulatedAngleRef.current -= steps * ANGLE_PER_STEP;
+      const ANGLE_PER_STEP = Math.PI / 4; // 45度
+      accumulatedAngleRef.current += dAngle;
 
-      let newValue = value + steps * step;
-      newValue = Math.max(min, Math.min(max, newValue));
-      const snappedValue = Math.round(newValue / step) * step;
+      const { value: val, min: mn, max: mx, step: st, onChange: chg } = propsRef.current;
 
-      const stepDecimals = (String(step).split('.')[1] || '').length;
-      const finalVal = Number(snappedValue.toFixed(stepDecimals));
+      if (Math.abs(accumulatedAngleRef.current) >= ANGLE_PER_STEP) {
+        const steps = Math.trunc(accumulatedAngleRef.current / ANGLE_PER_STEP);
+        accumulatedAngleRef.current -= steps * ANGLE_PER_STEP;
 
-      if (finalVal !== value) {
-        onChange(finalVal);
+        let newValue = val + steps * st;
+        newValue = Math.max(mn, Math.min(mx, newValue));
+        const snappedValue = Math.round(newValue / st) * st;
+
+        const stepDecimals = (String(st).split('.')[1] || '').length;
+        const finalVal = Number(snappedValue.toFixed(stepDecimals));
+
+        if (finalVal !== val) {
+          chg(finalVal);
+        }
       }
-    }
 
-    // つまみの表示上は、指のドラッグ角度に完全に追随して無限に回転させ続ける
-    setRotAngle((prev) => prev + dAngle * (180 / Math.PI));
-  };
+      // つまみの表示上は、指のドラッグ角度に完全に追随して無限に回転させ続ける
+      setRotAngle((prev) => prev + dAngle * (180 / Math.PI));
+    };
 
-  const handlePointerUp = () => {
-    setIsDragging(false);
-    prevAngleRef.current = null;
-    accumulatedAngleRef.current = 0;
-    // 非ドラッグ時は値に対応する角度(targetAngle)を表示するため、ここでの再設定は不要
-  };
+    const handleGlobalPointerUp = () => {
+      setIsDragging(false);
+      prevAngleRef.current = null;
+      accumulatedAngleRef.current = 0;
+    };
+
+    window.addEventListener('pointermove', handleGlobalPointerMove);
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleGlobalPointerMove);
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+    };
+  }, [isDragging]);
 
   // 目盛り用の点 (270度を10等分して並べる)
   const ticks = [];
@@ -171,9 +190,6 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
         <div
           ref={knobRef}
           onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
           style={{
               transform: `rotate(${displayAngle}deg)`,
             touchAction: 'none',
