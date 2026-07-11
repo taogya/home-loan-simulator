@@ -38,9 +38,9 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const displayAngle = isDragging ? rotAngle : targetAngle;
 
   // Propsを最新の状態に維持するref
-  const propsRef = useRef({ value, min, max, step, onChange });
+  const latestPropsRef = useRef({ value, min, max, step, onChange });
   useEffect(() => {
-    propsRef.current = { value, min, max, step, onChange };
+    latestPropsRef.current = { value, min, max, step, onChange };
   }, [value, min, max, step, onChange]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -83,21 +83,21 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       const ANGLE_PER_STEP = Math.PI / 4; // 45度
       accumulatedAngleRef.current += dAngle;
 
-      const { value: val, min: mn, max: mx, step: st, onChange: chg } = propsRef.current;
+      const { value: currentValue, min: minValue, max: maxValue, step: stepSize, onChange: handleChange } = latestPropsRef.current;
 
       if (Math.abs(accumulatedAngleRef.current) >= ANGLE_PER_STEP) {
         const steps = Math.trunc(accumulatedAngleRef.current / ANGLE_PER_STEP);
         accumulatedAngleRef.current -= steps * ANGLE_PER_STEP;
 
-        let newValue = val + steps * st;
-        newValue = Math.max(mn, Math.min(mx, newValue));
-        const snappedValue = Math.round(newValue / st) * st;
+        let newValue = currentValue + steps * stepSize;
+        newValue = Math.max(minValue, Math.min(maxValue, newValue));
+        const snappedValue = Math.round(newValue / stepSize) * stepSize;
 
-        const stepDecimals = (String(st).split('.')[1] || '').length;
+        const stepDecimals = (String(stepSize).split('.')[1] || '').length;
         const finalVal = Number(snappedValue.toFixed(stepDecimals));
 
-        if (finalVal !== val) {
-          chg(finalVal);
+        if (finalVal !== currentValue) {
+          handleChange(finalVal);
         }
       }
 
@@ -111,7 +111,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       accumulatedAngleRef.current = 0;
     };
 
-    window.addEventListener('pointermove', handleGlobalPointerMove);
+    window.addEventListener('pointermove', handleGlobalPointerMove, { passive: true });
     window.addEventListener('pointerup', handleGlobalPointerUp);
     window.addEventListener('pointercancel', handleGlobalPointerUp);
 
