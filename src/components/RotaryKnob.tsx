@@ -41,7 +41,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
   const latestPropsRef = useRef({ value, min, max, step, onChange });
   useEffect(() => {
     latestPropsRef.current = { value, min, max, step, onChange };
-  });
+  }, [value, min, max, step, onChange]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (knobRef.current) {
@@ -111,7 +111,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       accumulatedAngleRef.current = 0;
     };
 
-    window.addEventListener('pointermove', handleGlobalPointerMove, { passive: true });
+    window.addEventListener('pointermove', handleGlobalPointerMove);
     window.addEventListener('pointerup', handleGlobalPointerUp);
     window.addEventListener('pointercancel', handleGlobalPointerUp);
 
