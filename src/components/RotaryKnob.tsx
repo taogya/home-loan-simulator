@@ -83,21 +83,21 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       const ANGLE_PER_STEP = Math.PI / 4; // 45度
       accumulatedAngleRef.current += dAngle;
 
-      const { value: currentValue, min: minValue, max: maxValue, step: stepSize, onChange: handleChange } = latestPropsRef.current;
+      const currentProps = latestPropsRef.current;
 
       if (Math.abs(accumulatedAngleRef.current) >= ANGLE_PER_STEP) {
         const steps = Math.trunc(accumulatedAngleRef.current / ANGLE_PER_STEP);
         accumulatedAngleRef.current -= steps * ANGLE_PER_STEP;
 
-        let newValue = currentValue + steps * stepSize;
-        newValue = Math.max(minValue, Math.min(maxValue, newValue));
-        const snappedValue = Math.round(newValue / stepSize) * stepSize;
+        let newValue = currentProps.value + steps * currentProps.step;
+        newValue = Math.max(currentProps.min, Math.min(currentProps.max, newValue));
+        const snappedValue = Math.round(newValue / currentProps.step) * currentProps.step;
 
-        const stepDecimals = (String(stepSize).split('.')[1] || '').length;
+        const stepDecimals = (String(currentProps.step).split('.')[1] || '').length;
         const finalVal = Number(snappedValue.toFixed(stepDecimals));
 
-        if (finalVal !== currentValue) {
-          handleChange(finalVal);
+        if (finalVal !== currentProps.value) {
+          currentProps.onChange(finalVal);
         }
       }
 
@@ -111,7 +111,7 @@ export function RotaryKnob({ value, min, max, step, onChange, label }: RotaryKno
       accumulatedAngleRef.current = 0;
     };
 
-    window.addEventListener('pointermove', handleGlobalPointerMove, { passive: true });
+    window.addEventListener('pointermove', handleGlobalPointerMove);
     window.addEventListener('pointerup', handleGlobalPointerUp);
     window.addEventListener('pointercancel', handleGlobalPointerUp);
 
