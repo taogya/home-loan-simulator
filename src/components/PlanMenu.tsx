@@ -144,21 +144,29 @@ export function PlanMenu({ screen, onNavigate, onExport, onImport }: PlanMenuPro
       {open && (
         <>
           {/* 
-            【極上アクセシビリティハック】：
-            外側タップでメニューを閉じる「バックドロップ（画面全体を覆う不可視/半透明のレイヤー）」は、
-            モバイル・PCを問わず、必ずスタッキングコンテキストの影響を受けない最上位 (document.body 直下) へポータルとして強制マウントさせます！
-            これにより、ヘッダー外のメインコンテンツ部分、入力パーツ、チャート、フッターなど、
-            画面全体のどこをとっても、クリック・タップした瞬間に 100% 確実にメニューがシュッと閉じます！
+            外側クリック/タップでメニューを閉じるバックドロップ（画面全体を覆うレイヤー）。
+            - モバイル: 画面最下部のドロワーに合わせ、body 直下へポータル展開して全画面を覆う。
+            - デスクトップ: メニュー本体をヘッダー内にインライン描画するため、バックドロップも
+              同じスタッキングコンテキスト（ヘッダーは sticky z-40）内にインラインで置く。
+              ここを body 直下ポータルにすると、ヘッダーの z-40 コンテキストに閉じ込められた
+              メニュー本体（z-50）よりも、body 直下・同じ z-40・DOM 後方のバックドロップが前面に来て、
+              メニュー項目のクリックを奪ってしまう（＝デスクトップでメニューが押せない不具合）。
           */}
-          {createPortal(
+          {isMobile ? (
+            createPortal(
+              <div
+                className="fixed inset-0 z-40 transition-opacity cursor-default bg-slate-900/60 backdrop-blur-xs"
+                onClick={() => setOpen(false)}
+                aria-hidden="true"
+              />,
+              document.body
+            )
+          ) : (
             <div
-              className={`fixed inset-0 z-40 transition-opacity cursor-default ${
-                isMobile ? 'bg-slate-900/60 backdrop-blur-xs' : 'bg-transparent'
-              }`}
+              className="fixed inset-0 z-40 cursor-default bg-transparent"
               onClick={() => setOpen(false)}
               aria-hidden="true"
-            />,
-            document.body
+            />
           )}
 
           {/* 
